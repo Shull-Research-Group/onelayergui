@@ -95,7 +95,7 @@ if strcmp(filetypetxt,'.fre')
     
     %This provides the reference data. First it checks if there is a _bare
     %file.
-    reference = getreference(qcmpath, filebase, 1); %reference = 0 if unsuccessful
+    reference = getreference(handles, qcmpath, filebase, 1); %reference = 0 if unsuccessful
     if length(reference) > 1 %Uses _bare file if possible
         for n=2:7
             offset.(name{n}) = reference(n);
@@ -173,7 +173,7 @@ elseif strcmp(filetypetxt, '.mat')
     
     %Checks for a _bare file to get reference data from, if not, uses
     %freq_shift_ref.
-    reference = getreference(qcmpath, filebase, 2);
+    reference = getreference(handles, qcmpath, filebase, 2);
     if length(reference) > 1
         for n=2:7
             offset.(name{n}) = reference(n);
@@ -272,17 +272,20 @@ for nh=nhvals
     cleandelg(:,nh)=scalefactor*(qcmcleandata(indexm,nh+2)-offset.(gref));
 end
 
-filter1 = abs(cleandelf(:,1)) > 1e5;
-filter3 = abs(cleandelf(:,3)./3) > 1e5;
-filter5 = abs(cleandelf(:,5)./5) > 1e5;
-% cleandelf([filter1 filter3 filter5], (1:2:5)) = NaN;
-% cleandelg([filter1 filter3 filter5], (1:2:5)) = NaN;
-cleandelf(filter1, 1) = NaN;
-cleandelf(filter3, 3) = NaN;
-cleandelf(filter5, 5) = NaN;
-cleandelg(filter1, 1) = NaN;
-cleandelg(filter3, 3) = NaN;
-cleandelg(filter5, 5) = NaN;
+%Only applys threshhold filters if the sample isn't a bare crystal.
+if get(handles.isbare, 'value') == 0
+    filter1 = abs(cleandelf(:,1)) > 1e5;
+    filter3 = abs(cleandelf(:,3)./3) > 1e5;
+    filter5 = abs(cleandelf(:,5)./5) > 1e5;
+    % cleandelf([filter1 filter3 filter5], (1:2:5)) = NaN;
+    % cleandelg([filter1 filter3 filter5], (1:2:5)) = NaN;
+    cleandelf(filter1, 1) = NaN;
+    cleandelf(filter3, 3) = NaN;
+    cleandelf(filter5, 5) = NaN;
+    cleandelg(filter1, 1) = NaN;
+    cleandelg(filter3, 3) = NaN;
+    cleandelg(filter5, 5) = NaN;
+end
 
 %Saves all of the processed data into the handles structure.
 handles.din.qcmt=qcmt;
@@ -854,22 +857,31 @@ function savebutton_Callback(hObject, eventdata, handles)
 guidata(hObject,handles)
 hgsave('onelayergui.fig')
 
-function reference = getreference(qcmpath, filebase, filetype);
+function reference = getreference(handles, qcmpath, filebase, filetype);
 % Looks for reference data in bare file.
 % If it is the bare file, set the reference values to 0. No shift.
-if strcmp(filebase(end-3:end), 'bare')
+if get(handles.isbare, 'value')
     reference = [0 0 0 0 0 0 0];
 else
     try
-        if filetype == 1
+        if filetype == 1 %fre file
             barefile = [qcmpath filebase '_bare.fre'];
             rawdata = importdata(barefile);
             reference = mean(rawdata.data(:,1:7));
-        elseif filetype == 2
-            barefile = [qcmpath filebase '_bare.mat'];
-            load(barefile)
-            [~, idx] = max(abs_freq(:,1));
-            reference = nanmean(abs_freq(1:idx,1:7));
+        elseif filetype == 2 %mat file
+            % There is the original bare file, but may also be a modified
+            % one to correct for errors. Use the modified one if present.
+            if exist([qcmpath filebase '_bare_data.mat']) == 2
+                load([qcmpath filebase '_bare_data.mat']);
+                freqmean = nanmean(delf(:,1:5));
+                dissmean = nanmean(delg(:,1:5));
+                reference = [ 0 freqmean(1) dissmean(1) freqmean(3) dissmean(3) freqmean(5) dissmean(5)];
+            else
+                barefile = [qcmpath filebase '_bare.mat'];
+                load(barefile)
+                [~, idx] = max(abs_freq(:,1));
+                reference = nanmean(abs_freq(1:idx,1:7));
+            end
         end
     catch Err
         %If it can't find a bare mat file, look for a bare fre file
@@ -2065,3 +2077,5 @@ end
 
 function accesshandles_Callback(hObject, eventdata, handles)
 keyboard;
+
+function isbare_Callback(hObject, eventdata, handles)
