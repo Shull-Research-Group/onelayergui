@@ -22,7 +22,7 @@ function varargout = condfig2(varargin)
 
 % Edit the above text to modify the response to help condfig
 
-% Last Modified by GUIDE v2.5 24-Oct-2014 13:59:25
+% Last Modified by GUIDE v2.5 28-Oct-2014 10:59:53
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -452,13 +452,11 @@ F_conductance_2 = p(4).*((((x.^2).*((2.*p(2)).^2))./(((((p(1)).^2)-(x.^2)).^2)+.
     (((((p(1+10)).^2)-(x.^2)).^2)+((x.^2).*((2.*p(2+10)).^2))).*sind(p(3+10)))+p(5+10);%end of 3rd term
 
 function [fitdata spectra] = fitmultiplepeaks(spectra)
-
 freq = spectra(:,1);
 conductance = spectra(:,2);
 susceptance = spectra(:,3);
 if mean(freq) < 24e6 && mean(freq) > 16e6
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     spectra(:,4:5) = NaN;
     disp('The peak is the one at 21')
     return
@@ -468,7 +466,6 @@ end
 [peak_detect, index, numpeaks] = findrelavantpeaks(freq, conductance);
 if numpeaks == 0
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     spectra(:,4:5) = NaN;
     disp('No peaks were found')
     return
@@ -478,33 +475,14 @@ end
 if isempty(G_parameters)
     disp('No solution was found')
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     spectra(:,4:5) = NaN;
     return
 end
 
-% for i = length(index)
-%     if G_parameters{i}(3) < 0
-%         [peak_detect, index, numpeaks] = findrelavantpeaks(freq, conductance, length(index)-1);
-%         [pmul, I, G_parameters] = fitindividualpeaks(conductance, freq, peak_detect, index);
-%     end
-% end
-
-% close(figure(1));
-% figure(1);
-% hold on
-
 Imul = min(I{1}):max(I{end});
 
-% plot(freq, conductance)
-% plot(freq([Imul(1), Imul(end)]), conductance([Imul(1), Imul(end)]), 'k*')
-% for i = 1:numpeaks
-% plot(freq([I{i}(1), I{i}(end)]), conductance([I{i}(1), I{i}(end)]), 'r*','linewidth',2)
-% plot(freq, lfun4c(G_parameters{i}, freq), 'r')
-% end
-
 smoothcond = smooth(conductance,5);
-% assignin('base','p3',p3);
+
 if numpeaks == 1
     [G_fitmul, G_residualmul, G_parametersmul] = fit_spectra(pmul, freq, smoothcond, Imul);
     plot(freq, lfun4c(G_parametersmul, freq), 'k')
@@ -527,19 +505,14 @@ elseif numpeaks == 3
     susspec = lfun4s3(G_parametersmul, freq);
 end
 
-%if strcmp(imptpeak, 'left')
-    fitdata = G_parametersmul(1:5);
-%elseif strcmp(imptpeak, 'tallest')
-%    [~, idx] = max(peak_detect);
-%    fitdata = G_parametersmul(5*(idx)-4:5*idx);
-%end
+fitdata = G_parametersmul(1:5); %Data for leftmost peak
 
 spectra(:,4) = condspec;
 spectra(:,5) = susspec;
-disp('finish')
+
 
 function [pmul, I, G_parameters] = fitindividualpeaks(conductance, freq, peak_detect, index) 
-numpeaks = length(index)
+numpeaks = length(index);
 
 phi=0;%Assume rotation angle is 0
 offset=0;%Assume offset value is 0
@@ -629,11 +602,10 @@ for i = 1:numpeaks
     pmul = [pmul G_parameters{i}];
 end
 
-
 function [fitted_y,residual,parameters]=fit_spectra(x0,freq_data,y_data,I,lb,ub)%fit spectra to conductance curve
 %This function takes the starting guess values ('guess_values'_) and fits a
 %Lorentz curve to the the x_data and y_data. The variable 'guess_values' 
-%needs to be a 1x5 array. The designation foe each elements is as follows:
+%needs to be a 1x5 array. The designation for each elements is as follows:
 %p(1): f0 maximum frequency
 %p(2): gamma0 dissipation
 %p(3): phi phse angle difference
@@ -646,13 +618,15 @@ if nargin==4
     ub=[Inf Inf 90 Inf Inf];
 end%if nargin==3
 options=optimset('display','off','tolfun',1e-10,'tolx',1e-10,'MaxIter',5000);
-
-[parameters resnorm residual exitflag]=lsqcurvefit(@lfun4c,x0,freq_data(I),y_data(I),lb,ub,options);%use lsqcurvefit function to fit the spectra data to a Lorentz curve
-fitted_y=lfun4c(parameters,freq_data);
-residual=fitted_y-y_data;
-% exitflag
-% disp('Conductance fitted parameters:');
-% disp(parameters');
+try
+    [parameters resnorm residual exitflag]=lsqcurvefit(@lfun4c,x0,freq_data(I),y_data(I),lb,ub,options);%use lsqcurvefit function to fit the spectra data to a Lorentz curve
+catch Err
+    Err
+    ub = [Inf Inf Inf Inf Inf];
+    [parameters resnorm residual exitflag]=lsqcurvefit(@lfun4c,x0,freq_data(I),y_data(I),lb,ub,options);%use lsqcurvefit function to fit the spectra data to a Lorentz curve
+end
+    fitted_y=lfun4c(parameters,freq_data);
+    residual=fitted_y-y_data;
 
 function [peak_detect, index, numpeaks] = findrelavantpeaks(freq, conductance, varargin)
 %So why I am splitting this out as its own function is that I want to be
@@ -905,9 +879,94 @@ if handles.refit
     save([handles.main.din.qcmpath handles.main.din.filebase '_cond.mat'], 'time', 'spectra', 'fits');
     disp('The spectra changes have been saved!')
 end
-
 uiresume(handles.figure);
-
 
 function accesshandles_Callback(hObject, eventdata, handles)
 keyboard;
+
+function starttime_Callback(hObject, eventdata, handles)
+
+function starttime_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function endtime_Callback(hObject, eventdata, handles)
+
+function endtime_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function executeaction_Callback(hObject, eventdata, handles)
+% First, this needs to get the start and end times for the action
+starttime = str2num(get(handles.starttime, 'string'));
+endtime = str2num(get(handles.endtime, 'string'));
+if isempty(starttime) || isempty(endtime)
+    warning('Invalid times entered. Time must be a number')
+end
+
+% Retrieve the harmonics of interest
+harmonics = [];
+for i = 1:2:5
+    if get(handles.(['harm' num2str(i*5) 'MHz']), 'value')
+        harmonics = [harmonics i];
+    end
+end
+% If there aren't any, say so.
+if isempty(harmonics)
+    warning('You do not have any harmonics selected')
+    return
+end
+
+% Next, the times need to be correlated with the indexes.
+time = handles.main.din.qcmt;
+startidx = find(time>starttime, 1); %Finds first time in bounds
+endidx = find(time > endtime, 1) - 1; %Finds last time in bounds
+if isempty(endidx)
+    endidx = length(time);
+end
+
+timeidx = startidx:endidx;
+if get(handles.actionrefit, 'value')
+    %Code for refitting
+    for harmonic = harmonics
+        for index = timeidx
+            spectra =  handles.cond.spectra{index, harmonic}; %retrieve spectra
+            if ~isempty(spectra)
+                [fitdata, newspectra] = fitmultiplepeaks(spectra); %refit data
+                handles.cond.spectra{index, harmonic} = newspectra;
+                %Update both regular and clean data since this is a refitting
+                handles.main.din.cleandelf(index, harmonic) = fitdata(1) - handles.main.offset.(['f' num2str(harmonic)]);
+                handles.main.din.cleandelg(index, harmonic) = fitdata(2) - handles.main.offset.(['g' num2str(harmonic)]);
+                handles.main.din.delf(index, harmonic) = fitdata(1);
+                handles.main.din.delg(index, harmonic) = fitdata(2);
+                handles.cond.fits{index, harmonic} = fitdata;
+            end
+            if mod((index-startidx), round(length(timeidx)/10))
+                disp([num2str((index-startidx)/(endidx - startidx) * 100) ' percent done with ' num2str(harmonic) 'MHz']);
+            end
+        end    
+    end
+    %
+else % Since it is a button group, the only other option is to be removing.
+    for harmonic = harmonics %for selected harmonics
+        handles.main.din.cleandelf(startidx:endidx, harmonic) = NaN;
+        handles.main.din.cleandelg(startidx:endidx, harmonic) = NaN;        
+    end
+end
+
+guidata(hObject,handles) % save data
+plotraw(hObject, eventdata, handles) %replot
+plotcond(hObject, handles)
+view_Callback(hObject, eventdata, handles)
+
+function removeall_Callback(hObject, eventdata, handles)
+
+function harm25MHz_Callback(hObject, eventdata, handles)
+
+function harm15MHz_Callback(hObject, eventdata, handles)
+
+function harm5MHz_Callback(hObject, eventdata, handles)
+
+function refitremove_SelectionChangeFcn(hObject, eventdata, handles)
