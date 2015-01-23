@@ -315,8 +315,8 @@ for i = 1:2:min(size(handles.cond.spectra))
     
     if ~isempty(data)
         if get(handles.susceptance, 'value')
-            [dataplot dataline1 dataline2]  = plotyy(handles.(['nh' num2str((type*2)-1) 'axes']), data(:,1), data(:,2), data(:,1), data(:,3));
-            [fitplot fitline1 fitline2] = plotyy(handles.(['nh' num2str((type*2)-1) 'axes']), data(:,1), data(:,4), data(:,1), data(:,5));
+            [dataplot dataline1 dataline2]  = plotyy(handles.(['nh' num2str(i) 'axes']), data(:,1), data(:,2), data(:,1), data(:,3));
+            [fitplot fitline1 fitline2] = plotyy(handles.(['nh' num2str(i) 'axes']), data(:,1), data(:,4), data(:,1), data(:,5));
             set([dataline1 dataline2], {'color'}, {'r'; 'b'})
             set([fitline1 fitline2], 'color', 'k')
             set([dataplot fitplot], 'ycolor', 'k')
