@@ -142,7 +142,7 @@ uiresume(handles.figure);
 function handles = removepoint(hObject, eventdata, handles, harmonic)
 time = str2num(get(handles.currentpoint, 'string'));
 if isfield(handles, 'currspectime')
-    if time - handles.currspectime(1) <= 0.0011
+    if time - handles.currspectime(1) <= 0.0051
         handles.main.din.cleandelf(handles.currenttimeidx, harmonic) = NaN;
         handles.main.din.cleandelg(handles.currenttimeidx, harmonic) = NaN;
     else
@@ -175,8 +175,8 @@ function plotcond(hObject, handles)
 cond = handles.main.cond.points;
 
 %Queries current x and y limits so these can be left the same (if looking zoomed, for instance).
-ylimits1 = ylim(handles.main.axes1);
-ylimits2 = ylim(handles.main.axes2);
+%ylimits1 = ylim(handles.main.axes1);
+%ylimits2 = ylim(handles.main.axes2);
 xlimits1 = xlim(handles.main.axes1);
 xlimits2 = xlim(handles.main.axes2);
 
@@ -192,14 +192,14 @@ linestyle = [{'o-r'},{'o-b'},{'o-g'}];
 haveconductance = ~cellfun(@isempty, handles.cond.spectra); %logical 1 if spectra present
 qcmts = [qcmt'; qcmt'; qcmt'; qcmt'; qcmt'];
 harms = repmat([1,0,3,0,5], length(qcmt), 1);
-plot(handles.main.axes1, qcmts(haveconductance(:,1:2:5)), delf(haveconductance)./harms(haveconductance), '.k');
-plot(handles.main.axes2, qcmts(haveconductance(:,1:2:5)), delg(haveconductance), '.k');
+plot(handles.main.axes1, qcmts(haveconductance(:,1:2:end)), delf(haveconductance)./harms(haveconductance), '.k');
+plot(handles.main.axes2, qcmts(haveconductance(:,1:2:end)), delg(haveconductance), '.k');
 idx = handles.currenttimeidx;
 plot(handles.main.axes1, [qcmt(idx) qcmt(idx) qcmt(idx)], delf(idx, 1:2:5)./[1 3 5], '.c')
 plot(handles.main.axes2, [qcmt(idx) qcmt(idx) qcmt(idx)], delg(idx, 1:2:5), '.c')
 %Sets ylim back to the original so very far off points aren't shown.
-ylim(handles.main.axes1,ylimits1);
-ylim(handles.main.axes2,ylimits2);
+%ylim(handles.main.axes1,ylimits1);
+%ylim(handles.main.axes2,ylimits2);
 xlim(handles.main.axes1,xlimits1);
 xlim(handles.main.axes2,xlimits2);
 
@@ -215,8 +215,8 @@ else
     delg = handles.main.din.delg;
 end
 
-ylimits1 = ylim(handles.main.axes1);
-ylimits2 = ylim(handles.main.axes2);
+%ylimits1 = ylim(handles.main.axes1);
+%ylimits2 = ylim(handles.main.axes2);
 xlimits1 = xlim(handles.main.axes1);
 xlimits2 = xlim(handles.main.axes2);
 % now we plot the data
@@ -276,8 +276,8 @@ xlabel(handles.main.axes2,get(handles.main.xlabeltext,'string'))
 ylabel(handles.main.axes2,'\Delta\Gamma (Hz)')
 legend(handles.main.axes2, legendtext,'location','best')
 
-ylim(handles.main.axes1,ylimits1);
-ylim(handles.main.axes2,ylimits2);
+%ylim(handles.main.axes1,[-Inf Inf]);
+%ylim(handles.main.axes2,[-Inf Inf]);
 xlim(handles.main.axes1,xlimits1);
 xlim(handles.main.axes2,xlimits2);
 if get(handles.main.log,'value')
@@ -306,7 +306,7 @@ set(handles.nh5axes,'fontsize',12)
 foundtypes = logical([1 1 1]);
 
 duds = 0;
-for i = 1:2:5
+for i = 1:2:min(size(handles.cond.spectra))
     data = handles.cond.spectra{righttimeidx, i};
     
     axes(handles.(['nh' num2str(i) 'axes']));
@@ -456,7 +456,7 @@ freq = spectra(:,1);
 conductance = spectra(:,2);
 susceptance = spectra(:,3);
 if mean(freq) < 24e6 && mean(freq) > 16e6
-    fitdata = [0 0 0 0 0];
+    fitdata = [NaN NaN NaN NaN NaN];
     spectra(:,4:5) = NaN;
     disp('The peak is the one at 21')
     return
@@ -465,7 +465,7 @@ end
 %Find the peaks of interest.
 [peak_detect, index, numpeaks] = findrelavantpeaks(freq, conductance);
 if numpeaks == 0
-    fitdata = [0 0 0 0 0];
+    fitdata = [NaN NaN NaN NaN NaN];
     spectra(:,4:5) = NaN;
     disp('No peaks were found')
     return
@@ -474,12 +474,18 @@ end
 
 if isempty(G_parameters)
     disp('No solution was found')
-    fitdata = [0 0 0 0 0];
+    fitdata = [NaN NaN NaN NaN NaN];
     spectra(:,4:5) = NaN;
     return
 end
 
 Imul = min(I{1}):max(I{end});
+if length(Imul)<50
+    disp('Insufficient points for good fit')
+    fitdata = [NaN NaN NaN NaN NaN];
+    spectra(:,4:5) = NaN;
+    return
+end
 
 smoothcond = smooth(conductance,5);
 
@@ -829,6 +835,9 @@ if isfield(handles, 'currspectime')
     if abs(plottime - str2num(get(handles.currentpoint, 'string'))) <= 0.0011
         spectra =  handles.cond.spectra{index, harmonic};
         [fitdata newspectra] = fitmultiplepeaks(spectra);
+        if fitdata(1)/harmonic < -3e6
+            fitdata = [NaN NaN NaN NaN NaN];
+        end
         handles.cond.spectra{index, harmonic} = newspectra;
         handles.main.din.cleandelf(index, harmonic) = fitdata(1) - handles.main.offset.(['f' num2str(harmonic)]);
         handles.main.din.cleandelg(index, harmonic) = fitdata(2) - handles.main.offset.(['g' num2str(harmonic)]);
@@ -931,6 +940,7 @@ timeidx = startidx:endidx;
 if get(handles.actionrefit, 'value')
     %Code for refitting
     for harmonic = harmonics
+        calcpercent = 10;
         for index = timeidx
             spectra =  handles.cond.spectra{index, harmonic}; %retrieve spectra
             if ~isempty(spectra)
@@ -943,8 +953,9 @@ if get(handles.actionrefit, 'value')
                 handles.main.din.delg(index, harmonic) = fitdata(2);
                 handles.cond.fits{index, harmonic} = fitdata;
             end
-            if mod((index-startidx), round(length(timeidx)/10))
-                disp([num2str((index-startidx)/(endidx - startidx) * 100) ' percent done with ' num2str(harmonic) 'MHz']);
+            if index-startidx > calcpercent/100*length(timeidx)
+                calcpercent = calcpercent + 10;
+                disp([num2str(round((index-startidx)/(endidx - startidx) * 100)) ' percent done with ' num2str(harmonic) 'MHz']);
             end
         end    
     end

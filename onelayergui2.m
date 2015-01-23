@@ -326,14 +326,22 @@ if handles.filetype == 1 && exist([filename '.fre'], 'file') == 2
     errorf = [ranges(2) 0 ranges(4) 0 ranges(6)];
     errorg = [ranges(3) 0 ranges(5) 0 ranges(7)];
 % Method for .mat files
-elseif handles.filetype == 2 && exist([filename '.mat'], 'file') == 2
-    barefile = [filename '.mat'];
-    load(barefile)
-    [~, idx] = max(abs_freq(:,1));
-    ranges = range(abs_freq(1:idx,1:7));
-    errorf = [ranges(2) 0 ranges(4) 0 ranges(6)];
-    errorg = [ranges(3) 0 ranges(5) 0 ranges(7)];
-% Method for excel files
+elseif handles.filetype == 2 && exist([filename '.mat'], 'file') == 2 || exist([filename '.fre'], 'file')
+    try
+        barefile = [filename '.mat'];
+        load(barefile)
+        [~, idx] = max(abs_freq(:,1));
+        ranges = range(abs_freq(1:idx,1:7));
+        errorf = [ranges(2) 0 ranges(4) 0 ranges(6)];
+        errorg = [ranges(3) 0 ranges(5) 0 ranges(7)];
+    catch Err
+        barefile = [filename '.fre'];
+        rawdata = importdata(barefile);
+        ranges = range(rawdata.data(:,1:7));
+        errorf = [ranges(2) 0 ranges(4) 0 ranges(6)];
+        errorg = [ranges(3) 0 ranges(5) 0 ranges(7)];
+    end
+    % Method for excel files
 elseif handles.filetype == 3
     disp('Default error values will be used since there isn''t a procedure for Excel files.')
     errorf = [44 0 120 0 273];
@@ -789,33 +797,35 @@ condfiles = zeros(length(samefiles),2);
 index = 1;
 handles.cond.spectra = [];
 for i = samefiles
-    %Reads the filename and breaks it into chunks by the underscore
-    %delimiter
-    if handles.filetype == 2
-        parsed = textscan(files{i},'%s','delimiter','_');
-        condfiles(index,1) = str2double(regexprep([parsed{1}{length(parsed{1})-4}], 'dot', '.'));
-    else
-        parsed = textscan(files(i).name,'%s','delimiter','_');
-        condfiles(index,1) = str2double([parsed{1}{length(parsed{1})-4}]);
+   if ~strcmp(files{i}, 'reference') && ~strcmp(files{i}, 'version')
+        %Reads the filename and breaks it into chunks by the underscore
+        %delimiter
+        if handles.filetype == 2
+            parsed = textscan(files{i},'%s','delimiter','_');
+            condfiles(index,1) = str2double(regexprep([parsed{1}{length(parsed{1})-4}], 'dot', '.'));
+        else
+            parsed = textscan(files(i).name,'%s','delimiter','_');
+            condfiles(index,1) = str2double([parsed{1}{length(parsed{1})-4}]);
+        end
+        %Saves the time index (which is 4th fron the end)
+        %Gets and saves the number of the harmonic, 1-3
+        harm = parsed{1}{end};
+        condfiles(index,2) = str2double(harm(1));
+        %Determines the associated index of the main data (freq, diss, etc.)
+        [diff idx] = min(abs(handles.din.qcmt-condfiles(index,1)));
+        if diff<0.05 %0.05 seems to be a good distinguisher between close and the same
+            condfiles(index,3) = int32(idx);
+        else
+            condfiles(index,3) = 0;
+        end
+        
+        if handles.filetype == 2
+            handles.cond.filename{index} = files{i};
+        else
+            handles.cond.filename{index} = [handles.din.qcmpath files(i).name];
+        end
+        index = index + 1;
     end
-    %Saves the time index (which is 4th fron the end)
-    %Gets and saves the number of the harmonic, 1-3
-    harm = parsed{1}{end};
-    condfiles(index,2) = str2double(harm(1));
-    %Determines the associated index of the main data (freq, diss, etc.)
-    [diff idx] = min(abs(handles.din.qcmt-condfiles(index,1)));
-    if diff<0.05 %0.05 seems to be a good distinguisher between close and the same
-        condfiles(index,3) = int32(idx);
-    else
-        condfiles(index,3) = 0;
-    end
-
-    if handles.filetype == 2
-        handles.cond.filename{index} = files{i};
-    else
-        handles.cond.filename{index} = [handles.din.qcmpath files(i).name];
-    end
-    index = index + 1;
 end
 handles.cond.points = condfiles;
 conductance = handles.cond;
@@ -1057,25 +1067,25 @@ for k=1:handles.datapoints;
     end
     for m=1:handles.datasets
         outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
-%         if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
-%             answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
-%                 ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
-%                 ',' num2str(nhvals{m}(3))],[],['Do you want to change the input values?']},...
-%                 'Yes', 'No')
-%             switch answer
-%                 case 'Yes'
-%                     keystroke = 0;
-%                     
-%                     while keystroke ~= 'w';
-%                         waitforbuttonpress;
-%                        keystroke = get(gcf, 'CurrentCharacter')
-%                     end
-%                     outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
-%                 case 'No'
-%                 case 'Cancel'
-%                     return
-%             end
-%         end
+        if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
+            answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
+                ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
+                ',' num2str(nhvals{m}(3))],[],['Do you want to change the input values?']},...
+                'Yes', 'No')
+            switch answer
+                case 'Yes'
+                    keystroke = 0;
+                    
+                    while keystroke ~= 'w';
+                       waitforbuttonpress;
+                       keystroke = get(gcf, 'CurrentCharacter')
+                    end
+                    outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
+                case 'No'
+                case 'Cancel'
+                    return
+            end
+        end
     end
     if mod(k,1000)==0
         handles.dout=outputs;
@@ -1741,6 +1751,27 @@ x0(1) = str2num(get(handles.phi,'String'));
 dfield=['d',num2str(nhi(1)),'calc'];
 x0(2) = str2num(get(handles.(dfield),'String'));
 harmonicadjustment=str2num(get(handles.harmonicadjustment,'string'));
+if x0(1) > 90 || x0(2) > 1e10  || x0(2) == 0
+    answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
+        ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
+        ',' num2str(nhvals{m}(3))],[],['Do you want to change the input values?']},...
+        'Yes', 'No')
+    switch answer
+        case 'Yes'
+            keystroke = 0;
+            
+            while keystroke ~= 'w';
+                waitforbuttonpress;
+                keystroke = get(gcf, 'CurrentCharacter')
+            end
+            x0(1) = str2num(get(handles.phi,'String'));
+            dfield=['d',num2str(nhi(1)),'calc'];
+            x0(2) = str2num(get(handles.(dfield),'String'));
+        case 'No'
+        case 'Cancel'
+            return
+    end
+end
 
 dissratio=dg(nhi(3))/df(nhi(3));
 harmratio=nhi(1)*df(nhi(2))/(nhi(2)*df(nhi(1)));
