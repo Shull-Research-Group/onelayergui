@@ -191,6 +191,7 @@ linestyle = [{'o-r'},{'o-b'},{'o-g'}];
 
 %Determines which spectra are present and plots them.
 haveconductance = ~cellfun(@isempty, handles.cond.spectra); %logical 1 if spectra present
+haveconductance = haveconductance(:,1:5); %eliminates higher harmonics even if present
 qcmts = [qcmt'; qcmt'; qcmt'; qcmt'; qcmt'];
 harms = repmat([1,0,3,0,5], length(qcmt), 1);
 plot(handles.main.axes1, qcmts(haveconductance(:,1:2:end)), delf(haveconductance)./harms(haveconductance), '.k');
