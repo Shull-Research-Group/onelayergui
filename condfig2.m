@@ -308,7 +308,7 @@ set(handles.nh5axes,'fontsize',12)
 foundtypes = logical([1 1 1]);
 
 duds = 0;
-for i = 1:2:min(size(handles.cond.spectra))
+for i = 1:2:min([min(size(handles.cond.spectra)),5])
     data = handles.cond.spectra{righttimeidx, i};
     
     axes(handles.(['nh' num2str(i) 'axes']));
@@ -851,7 +851,7 @@ if get(handles.actionrefit, 'value')
             end
             if index-startidx > calcpercent/100*length(timeidx)
                 calcpercent = calcpercent + 10;
-                disp([num2str(round((index-startidx)/(endidx - startidx) * 100)) ' percent done with ' num2str(harmonic) 'MHz']);
+                disp([num2str(round((index-startidx)/(endidx - startidx) * 100)) ' percent done with ' num2str(harmonic*5) 'MHz']);
             end
         end    
     end
