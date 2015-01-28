@@ -797,12 +797,13 @@ condfiles = zeros(length(samefiles),2);
 index = 1;
 handles.cond.spectra = [];
 for i = samefiles
-   if ~strcmp(files{i}, 'reference') && ~strcmp(files{i}, 'version')
         %Reads the filename and breaks it into chunks by the underscore
         %delimiter
-        if handles.filetype == 2
+        if handles.filetype == 2 && ~strcmp(files{i}, 'reference') && ~strcmp(files{i}, 'version')
             parsed = textscan(files{i},'%s','delimiter','_');
             condfiles(index,1) = str2double(regexprep([parsed{1}{length(parsed{1})-4}], 'dot', '.'));
+        elseif handles.filetype == 2 %if it is the "reference" or "version" file
+            break
         else
             parsed = textscan(files(i).name,'%s','delimiter','_');
             condfiles(index,1) = str2double([parsed{1}{length(parsed{1})-4}]);
@@ -825,7 +826,6 @@ for i = samefiles
             handles.cond.filename{index} = [handles.din.qcmpath files(i).name];
         end
         index = index + 1;
-    end
 end
 handles.cond.points = condfiles;
 conductance = handles.cond;
@@ -1068,23 +1068,23 @@ for k=1:handles.datapoints;
     for m=1:handles.datasets
         outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
         if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
-            answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
-                ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
-                ',' num2str(nhvals{m}(3))],[],['Do you want to change the input values?']},...
-                'Yes', 'No')
-            switch answer
-                case 'Yes'
-                    keystroke = 0;
-                    
-                    while keystroke ~= 'w';
-                       waitforbuttonpress;
-                       keystroke = get(gcf, 'CurrentCharacter')
-                    end
-                    outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
-                case 'No'
-                case 'Cancel'
-                    return
-            end
+%             answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
+%                 ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
+%                 ',' num2str(nhvals{m}(3))],[],['Do you want to change the input values?']},...
+%                 'Yes', 'No')
+%             switch answer
+%                 case 'Yes'
+%                     keystroke = 0;
+%                     
+%                     while keystroke ~= 'w';
+%                        waitforbuttonpress;
+%                        keystroke = get(gcf, 'CurrentCharacter')
+%                     end
+%                     outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
+%                 case 'No'
+%                 case 'Cancel'
+%                     return
+%             end
         end
     end
     if mod(k,1000)==0
@@ -1388,11 +1388,18 @@ index=0;
 legendentries=[];
 for nh=handles.activenh.on
     index=index+1;
-    legendentries=[legendentries,index];
     toplot = ~isnan(dfp(:,nh));
-    plots(index)=plot(timeinp(toplot),dfp(toplot,nh)/nh,linestyles{nh},'color',datalinecolor{nh});
-    hold on
-    legendtext{index}=['n=',num2str(nh)];
+    try
+        plots(index)=plot(timeinp(toplot),dfp(toplot,nh)/nh,linestyles{nh},'color',datalinecolor{nh});
+        hold on
+        legendtext{index}=['n=',num2str(nh)];
+    catch Err
+        if strcmp(Err.identifier, 'MATLAB:badRectangle')
+            disp('No data to plot for the 5th harmoic')
+            handles.activenh.on = handles.activenh.on(handles.activenh.on~=5);
+            index = index-1;
+        end
+    end
 end
 
 % now we plot the calculated values
