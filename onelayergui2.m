@@ -1263,7 +1263,8 @@ if exist([handles.din.qcmpath handles.din.filebase '_cond.mat']) == 2
         maximptime = max(cond.time); %So only need to add new times
     end
 else
-    maximptime = 0; %Set to 0 if none found (so it will add all)         
+    maximptime = 0; %Set to 0 if none found (so it will add all) 
+    disp('The cond file will have to be built from scratch. This could take a while.')
 end
 
 pointstoadd = find(points(:,1)>maximptime); %Finds spectra from later times
