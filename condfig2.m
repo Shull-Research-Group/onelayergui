@@ -430,13 +430,12 @@ end
 function F_both = lfun4cs(p,x)
 F_both = [lfun4c(p,x) lfun4s(p,x)];
 
-function [fitdata spectra] = fitmultiplepeaks(spectra, condsus)
+function [fitdata, spectra] = fitmultiplepeaks(spectra, condsus)
 freq = spectra(:,1);
 conductance = spectra(:,2);
 susceptance = spectra(:,3);
 if mean(freq) < 24e6 && mean(freq) > 16e6
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     disp('The peak is the one at 21')
     return
 end
@@ -445,7 +444,6 @@ end
 [peak_detect, index, numpeaks] = findrelavantpeaks(freq, conductance);
 if numpeaks == 0
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     disp('No peaks were found')
     return
 end
@@ -455,7 +453,6 @@ end
 if isempty(G_parameters)
     disp('No solution was found')
     fitdata = [0 0 0 0 0];
-    spectra = data.data;
     return
 end
 
@@ -682,8 +679,8 @@ numpeaks = sum(spacedpeaks);
 if numpeaks == 3
     absolutepeakheight = peak_detect - baseline(index);
     if absolutepeakheight(2)< absolutepeakheight(1) && absolutepeakheight(2) < absolutepeakheight(3)
-        peak_detect = peak_detect([1,3])
-        index = index([1,3])
+        peak_detect = peak_detect([1,3]);
+        index = index([1,3]);
         numpeaks = 2;
     end
 end
