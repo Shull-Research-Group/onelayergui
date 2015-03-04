@@ -1563,7 +1563,7 @@ m.delg = handles.din.cleandelg;
 m.time = handles.din.qcmt;
 
 function loadcleaned_Callback(hObject, eventdata, handles)
-% Loads the variables from the _data file.
+% Loads the "clean" variables from the _data file (delf and delg).
 try
     load([handles.din.qcmpath handles.din.filebase '_data.mat'])
 catch Err
@@ -1577,16 +1577,19 @@ catch Err
         rethrow(Err)
     end
 end
-%So I want to save the cleaned data already saved, but to append to larger
-%files
+%If there is new data since the last save, it should be included. So this
+%starts with all of the data as it is currently
 handles.din.cleandelf = handles.din.delf;
 handles.din.cleandelg = handles.din.delg;
 %Gets the length of the saved data
-curdata = length(time);
-handles.din.cleandelf(1:curdata,:) = delf; %Overwrites with saved data
+curdata = length(time); %"time" is a variable from the saved data file
+%Overwrites the times for which there is previously saved data with that
+%data.
+handles.din.cleandelf(1:curdata,:) = delf; 
 handles.din.cleandelg(1:curdata,:) = delg;
-guidata(hObject,handles);
-plotraw(hObject, eventdata, handles)
+
+guidata(hObject,handles); %Save changes to handles structure
+plotraw(hObject, eventdata, handles) %Plot updated data
 
 function opencond_Callback(hObject, eventdata, handles)
 % This function opens the second program, condfig, which displays
@@ -1827,12 +1830,11 @@ function maps_Callback(hObject, eventdata, handles)
 dl = linspace(0,1,250);
 phi = linspace(0,90,250);
 
-        for i = 1:length(dl)
-            for j = 1:length(phi)
-                dfstar(i,j) = delfstar(dl(i), phi(j));
-            end
-        end
-
+for i = 1:length(dl)
+    for j = 1:length(phi)
+        dfstar(i,j) = delfstar(dl(i), phi(j));
+    end
+end
 
 min_c = -4;
 max_c = 3.5;
