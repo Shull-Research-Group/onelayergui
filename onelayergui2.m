@@ -32,6 +32,9 @@ set(hObject,'toolbar','figure');
 handles.constants.f1 = 5e6;
 handles.constants.zq = 8.84e6;
 
+handles.constants.nhvals = {[1,3,1,5] [1,3,3,5] [1,5,1,3] [1,5,5,3] [3,5,3,1] [3,5,5,1]};
+handles.constants.label = {'1:3,1' '1:3,3' '1:5,1' '1:5,5' '3:5,3' '3:5,5'};
+
 guidata(hObject, handles);
 set(gcf,'Pointer','arrow');
 
@@ -356,12 +359,12 @@ end
 function solve_Callback(hObject,eventdata,handles)
 % Uses the top selected harmonic combination to solve the currently loaded
 % point.
-[~, ~, nhvals] = getnhvals(handles);
-nh = nhvals{1};
-findsolution(hObject,eventdata,handles,1,nh)
+firstnhvals = handles.constants.nhvals(handles.mnumber);
+findsolution(hObject,eventdata,handles,1,firstnhvals)
 
 function outputs=findsolution(hObject, eventdata, handles, time, nhset)
 handles.activenh = getactivenh(handles);
+%Reads the values of df and dg off the screen
 for nh=handles.activenh.on
     fname=['f',num2str(nh),'exp'];
     gname=['g',num2str(nh),'exp'];
@@ -637,7 +640,6 @@ set(handles.grho3,'string',num2str(0.001*grho(3),'%6.2e'))
 set(handles.grho5,'string',num2str(0.001*grho(5),'%6.2e'))
 set(handles.drho1,'string',num2str(drho*1000,'%6.3f'))
 
-hgsave('onelayergui.fig')
 guidata(hObject, handles);
 
 function F = fstar(x,nh,harmratio,dissratio,harmonicadjustment)
@@ -865,7 +867,7 @@ guidata(hObject, handles)
 function savebutton_Callback(hObject, eventdata, handles)
 %saves the fig file
 guidata(hObject,handles)
-hgsave('onelayergui.fig')
+hgsave('onelayergui2.fig')
 
 function reference = getreference(handles, qcmpath, filebase, filetype);
 % Looks for reference data in bare file.
@@ -1013,11 +1015,12 @@ catch Err
     if strcmp('MATLAB:nonExistentField', Err.identifier)
        warning = warndlg('The data was not saved correctly. Please reload the file')
        uiwait(warning)
-       changeqcmfile_Callback(hObject, eventdata, handles)
-       
+       changeqcmfile_Callback(hObject, eventdata, handles)     
     end
 end
-[handles.datasets,handles.labels,nhvals]=getnhvals(handles);
+
+nhvals = handles.constants.nhvals;
+mnumber = getnhvals(handles);
 
 % This doesn't work if there are lots of NaNs, so the following fills in
 % the holes. Which actually doesn't seem a good idea in some cases, but
@@ -1027,8 +1030,8 @@ cleandelg(isnan(cleandelg)) = interp1(find(~isnan(cleandelg)), cleandelg(~isnan(
 
 outputs={};
 while but == 1
-    k=k+1;
-    handles.datapoints=k;
+    k = k+1;
+    handles.datapoints = k;
     [time,~,but] = ginput(1);
     for nh=handles.activenh.on
         nhstr=num2str(nh);
@@ -1043,10 +1046,10 @@ while but == 1
         set(handles.(['g',nhstr,'exp']),'string','-')
     end
     if get(handles.autosolve,'value')
-        for m=1:handles.datasets
+        for m = mnumber
             outputs{k,m}=findsolution(hObject, eventdata,handles,time,nhvals{m});
             if get(handles.calcerror, 'value') == 1
-            finderror(hObject, handles, nhvals{m(1)});
+                finderror(hObject, handles, nhvals{m});
             end
         end
     end
@@ -1057,7 +1060,9 @@ guidata(hObject,handles)
 function solveall_Callback(hObject, eventdata, handles)
 checksolveharms(hObject, handles)
 handles.activenh=getactivenh(handles);
-[handles.datasets,handles.labels,nhvals]=getnhvals(handles);
+mnumber = getnhvals(handles); %Determine harmonics to solve for
+nhvals = handles.constants.nhvals; %Make the variable shorter to type
+
 struct2var(handles.din);
 [~,handles.datapoints]=size(qcmt);
 for k=1:handles.datapoints;
@@ -1065,7 +1070,7 @@ for k=1:handles.datapoints;
         set(handles.(['f',num2str(nh),'exp']),'string',num2str(cleandelf(k,nh),'%6.0f'))
         set(handles.(['g',num2str(nh),'exp']),'string',num2str(cleandelg(k,nh),'%6.0f'))
     end
-    for m=1:handles.datasets
+    for m = mnumber
         outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
         if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
 %             answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
@@ -1087,28 +1092,29 @@ for k=1:handles.datapoints;
 %             end
         end
     end
-    if mod(k,1000)==0
-        handles.dout=outputs;
-        handles=plotvalues(hObject,handles);
+    if mod(k,500)==0
+        handles.dout = outputs;
+        handles = plotvalues(hObject,handles);
+        disp([ num2str(k/handles.datapoints*100, 2) '% done'])
     end
 end
 handles.dout=outputs;
-handles=plotvalues(hObject,handles);
+handles = plotvalues(hObject,handles);
 guidata(hObject,handles);
 
 function n1_Callback(hObject,eventdata,handles)
-handles.activenh=getactivenh(handles);
+handles.activenh = getactivenh(handles);
 guidata(hObject,handles)
 
 function n3_Callback(hObject,eventdata,handles)
-handles.activenh=getactivenh(handles);
+handles.activenh = getactivenh(handles);
 guidata(hObject,handles)
 
 function n5_Callback(hObject,eventdata,handles)
-handles.activenh=getactivenh(handles);
+handles.activenh = getactivenh(handles);
 guidata(hObject,handles)
 
-function activenh=getactivenh(handles);
+function activenh = getactivenh(handles)
 % Determines the harmonic buttons that are selected
 activenh.on=[];
 activenh.off=[];
@@ -1120,48 +1126,22 @@ for nh=[1,3,5]
     end
 end
 
-function [mnumber,labels,nhvals]=getnhvals(handles)
-% sets the calculation scheme (1:3,1 etc.) and sets the associated labels
-% for the plots
-mnumber=0;
+function mnumber = getnhvals(handles)
+% Determines which harmonics should be calculated
+
+mnumber = [];
 for m=1:6
-    if get(handles.(['nhset',num2str(m),'select']),'value')
-        mnumber=mnumber+1;
-        [nhvals{mnumber},labels{mnumber}]=getnhset(handles.(['nhset',num2str(m)]));
+    % Reads in the checkmarks and records the numbers of the checked ones
+    if get(handles.(['nhset',num2str(m),'select']),'value') == 1
+        mnumber = [mnumber m];
     end
 end
 
 % Uses the first box if nothing is selected.
-if mnumber == 0
+if isempty(mnumber)
     warning('Using default harmonic since none was selected')
-    mnumber = 1;
     set(handles.nhset1select, 'value', 1)
-    [nhvals{1}, labels{1}] = getnhset(handles.nhset1);
-end
-
-function [nhset,label]=getnhset(nhset)
-% sets a specific value for nhvals, read from the corresponding popup menu
-switch get(nhset,'value')
-    % note:  4th value in nhset is unused harmonic
-    case 1
-        nhset=[1,3,1,5];
-        label='1:3,1';
-    case 2
-        nhset=[1,3,3,5];
-        label='1:3,3';
-    case 3
-        nhset=[1,5,1,3];
-        label='1:5,1';
-    case 4
-        nhset=[1,5,5,3];
-        label='1:5,5';
-    case 5
-        nhset=[3,5,3,1];
-        label='3:5,3';
-    case 6
-        nhset=[3,5,5,1];
-        label='3:5,5';
-    otherwise
+    mnumber = 1;
 end
 
 function struct2var(s)
@@ -1299,15 +1279,14 @@ set(0,'defaultlinelinewidth',2)
 % variables with 'p' in the name are the ones we use to create the plots
 dfp=handles.din.cleandelf;
 dgp=handles.din.cleandelg;
+mnumber = handles.mnumber;
 timeinp=handles.din.qcmt;
 todo = size(handles.dout);
 
-% logical of whether error is used or not. This saves having to use the get
-% function a lot.
 doerror = get(handles.calcerror, 'value');
 
 for k=1:todo(1)
-    for m=1:handles.datasets
+    for m = mnumber
         struct2var(handles.dout{k,m})
         grhop(k,m)=grho(1);
         drhop(k,m)=drho(1);
@@ -1404,12 +1383,12 @@ for nh=handles.activenh.on
 end
 
 % now we plot the calculated values
-for m=1:handles.datasets
+for m = mnumber
     legendentries=[legendentries,index+1];
     for nh=handles.activenh.on
         index=index+1;
         plots(index)=plot(timep(:,m),dfcalcp(:,m,nh)/nh,symbols{m},'color','black');
-        legendtext{index}=handles.labels{m};
+        legendtext{index}=handles.constants.label{m};
     end
 end
 xlabel(get(handles.xlabeltext,'string'))
@@ -1429,11 +1408,11 @@ for nh=handles.activenh.on
 end
 
 % now we plot the calculated values
-for m=1:handles.datasets
+for m = mnumber
     for nh=handles.activenh.on
         index=index+1;
         plots(index)=semilogy(timep(:,m),dgcalcp(:,m,nh),symbols{m},'color','black');
-        legendtext{index}=handles.labels{m};
+        legendtext{index}=handles.constants.label{m};
     end
 end
 
@@ -1458,50 +1437,48 @@ colors{5}=[1, 0, 0];
 colors{6}=[0, 0.5, 0];
 
 outputaxes(1)=subplot(1,3,1);
+hold on
 if doerror
-    for m=1:handles.datasets
-        errorbar(timep(:,m),drhop(:,m),drhoep(:,m),symbols{m},'color',colors{m})
-        hold on
+    for m = mnumber
+        errorbar(timep(:,m),drhop(:,m),drhoep(:,m),symbols{m},'color',colors{m})    
     end
 else
-    for m=1:handles.datasets
+    for m = mnumber
         plot(timep(:,m),drhop(:,m),symbols{m},'color',colors{m})
-        hold on
     end
 end
-legendout(1)=legend(handles.labels,'location','best');
+legendout(1)=legend(handles.constants.label{mnumber},'location','best');
 xlabel(get(handles.xlabeltext,'string'))
 ylabel('d\rho (g/m^{2})')
 
 outputaxes(2)=subplot(1,3,2);
+hold on
 if doerror
-    for m=1:handles.datasets
+    for m = mnumber
         errorbar(timep(:,m),grhop(:,m),grhoep(:,m),symbols{m},'color',colors{m})
-        hold on
     end
 else
-    for m=1:handles.datasets
+    for m = mnumber
         plot(timep(:,m),grhop(:,m),symbols{m},'color',colors{m})
-        hold on
     end
 end
-legendout(2)=legend(handles.labels,'location','best');
+legendout(2)=legend(handles.constants.label{mnumber}, 'location','best');
 xlabel(get(handles.xlabeltext,'string'))
 ylabel('|G^{*}|\rho (Pa-g/cm^{3})')
 
 outputaxes(3)=subplot(1,3,3);
 if doerror
-    for m=1:handles.datasets
+    for m = mnumber
         errorbar(timep(:,m),phip(:,m),phiep(:,m),symbols{m},'color',colors{m})
         hold on
     end
 else
-    for m=1:handles.datasets
+    for m = mnumber
         plot(timep(:,m),phip(:,m),symbols{m},'color',colors{m})
         hold on
     end
 end
-legendout(3)=legend(handles.labels,'location','best');
+legendout(3)=legend(handles.constants.label{mnumber},'location','best');
 xlabel(get(handles.xlabeltext,'string'))
 ylabel('\phi (deg.)')
 
@@ -1526,7 +1503,6 @@ for hL=[legendin(1:2) legendout(1:3)]
     % ht = findobj( get(hL,'children'), 'type', 'text');
     set(gcf,'Resizefcn','')
 end
-
 
 handles.outputplot=outputplot;
 handles.inputplot=inputplot;
@@ -1671,8 +1647,7 @@ combinations = {[1 3] [1 3] [1 5] [1 5] [3 5] [3 5]};
 if length(nhsel) < 3
     for i = 1:6
         if get(handles.(['nhset' num2str(i) 'select']), 'value') == 1
-            selection = get(handles.(['nhset' num2str(i)]), 'value');
-            overlap = sum(ismember(nhsel, combinations{selection}))
+            overlap = sum(ismember(nhsel, combinations{i}))
             if overlap ~= 2
                 set(handles.(['nhset' num2str(i) 'select']), 'value', 0)
             end
@@ -1887,7 +1862,7 @@ timeinp=handles.din.qcmt;
 todo = size(handles.dout);
 
 for k=1:todo(1)
-    %for m=1:handles.datasets
+    %for m = mnumber
         struct2var(handles.dout{k}) %data for specific harmonic combination
         dp(k,:)=d(1:5);
         phip(k)=phi(1);
@@ -1950,18 +1925,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function nhset1select_Callback(hObject, eventdata, handles)
-
-function nhset2select_Callback(hObject, eventdata, handles)
-
-function nhset3select_Callback(hObject, eventdata, handles)
-
-function nhset5select_Callback(hObject, eventdata, handles)
-
-function nhset6select_Callback(hObject, eventdata, handles)
-
-function nhset4select_Callback(hObject, eventdata, handles)
-
 function nhset4_Callback(hObject, eventdata, handles)
 
 function nhset4_CreateFcn(hObject, eventdata, handles)
@@ -1982,6 +1945,30 @@ function nhset6_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+function nhset1select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
+
+function nhset2select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
+
+function nhset3select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
+
+function nhset4select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
+
+function nhset5select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
+
+function nhset6select_Callback(hObject, eventdata, handles)
+handles.mnumber = getnhvals(handles);
+guidata(hObject,handles);
 
 function qcmfile_Callback(hObject, eventdata, handles)
 
