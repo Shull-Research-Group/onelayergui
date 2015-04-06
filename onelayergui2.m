@@ -233,13 +233,6 @@ else
     nhvals=[1,3,5];
 end
 
-% account for possibility that data are in kHz
-if get(handles.khz,'value')
-    scalefactor=1000;
-else
-    scalefactor=1;
-end
-
 %This part writes the reference values for the nhvals in use to the gui
 for nh=nhvals
     fref=['f',num2str(nh)];
@@ -269,10 +262,10 @@ end
 for nh=nhvals
     fref=['f',num2str(nh)];
     gref=['g',num2str(nh)];
-    delf(:,nh)=scalefactor*(qcmdata(indexm,nh+1)-offset.(fref));
-    delg(:,nh)=scalefactor*(qcmdata(indexm,nh+2)-offset.(gref));
-    cleandelf(:,nh)=scalefactor*(qcmcleandata(indexm,nh+1)-offset.(fref));
-    cleandelg(:,nh)=scalefactor*(qcmcleandata(indexm,nh+2)-offset.(gref));
+    delf(:,nh)=(qcmdata(indexm,nh+1)-offset.(fref));
+    delg(:,nh)=(qcmdata(indexm,nh+2)-offset.(gref));
+    cleandelf(:,nh)=(qcmcleandata(indexm,nh+1)-offset.(fref));
+    cleandelg(:,nh)=(qcmcleandata(indexm,nh+2)-offset.(gref));
 end
 
 %Only applys threshhold filters if the sample isn't a bare crystal.
@@ -1636,11 +1629,11 @@ function checksolveharms(hObject, handles)
 % which the data was imported. Prohibits a [155] calculation if n=5 isn't
 % checked.
 try
-nhsel = handles.activenh.on;
+    nhsel = handles.activenh.on;
 catch Err
     if strcmp(Err.identifier, 'MATLAB:nonExistentField')
-    handles.activenh = getactivenh(handles)
-    nhsel = handles.activenh.on;
+        handles.activenh = getactivenh(handles);
+        nhsel = handles.activenh.on;
     end
 end
 combinations = {[1 3] [1 3] [1 5] [1 5] [3 5] [3 5]};
