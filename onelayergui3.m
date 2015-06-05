@@ -358,7 +358,6 @@ handles.cond = conductance;
 
 %Changes the data file to not be "loading" anymore.
 set(handles.qcmfile,'string',qcmfile)
-
 guidata(hObject, handles); %Saves new handles.
 
 function [errorf errorg] = geterrorrange(hObject, handles, filepathbase);
@@ -420,12 +419,9 @@ findsolution(hObject,eventdata,handles,1,firstnhvals{1});
 function outputs = findsolution(hObject, eventdata, handles, time, nhset)
 handles.activenh = getactivenh(handles);
 %Reads the values of df and dg off the screen
-for nh=handles.activenh.on
-    fname=['f',num2str(nh),'exp'];
-    gname=['g',num2str(nh),'exp'];
-    df(nh)=str2num(get(handles.(fname),'string'));
-    dg(nh)=str2num(get(handles.(gname),'string'));
-end
+nh=handles.activenh.on;
+df(nh) = handles.deldatadata(ceil(nh/2),1);
+dg(nh) = handles.deldatadata(ceil(nh/2),3);
 
 %This if statement determines if one of the points used in the evaluation
 %was not collected (turned into NaN). If there is a NaN, this turned that
@@ -626,15 +622,12 @@ else
         set(handles.phi,'String',num2str(phi,'%8.2f'))
         set(handles.drho,'String',num2str(drho(1),'%8.2f'))
         set(handles.grho,'String',num2str(grho(1),'%6.2e'))
-        set(handles.f1calc,'string',num2str(dfcalc(1),'%8.0f'))
-        set(handles.f3calc,'string',num2str(dfcalc(3),'%8.0f'))
-        set(handles.f5calc,'string',num2str(dfcalc(5),'%8.0f'))
+        handles.deldatadata([1:3],2) = dfcalc(1:2:5);
+        handles.deldatadata([1:3],4) = dgcalc(1:2:5);
+        redrawtable(hObject, handles);
         set(handles.f1fs,'string',num2str(real(delfstar(d(1),phi)),'%8.3f'))
         set(handles.f3fs,'string',num2str(real(delfstar(d(3),phi)),'%8.3f'))
         set(handles.f5fs,'string',num2str(real(delfstar(d(5),phi)),'%8.3f'))
-        set(handles.g1calc,'string',num2str(dgcalc(1),'%8.0f'))
-        set(handles.g3calc,'string',num2str(dgcalc(3),'%8.0f'))
-        set(handles.g5calc,'string',num2str(dgcalc(5),'%8.0f'))
         set(handles.lambdarho1,'string',num2str(0.001*lambdarho(1),'%8.2f'))
         set(handles.lambdarho3,'string',num2str(0.001*lambdarho(3),'%8.2f'))
         set(handles.lambdarho5,'string',num2str(0.001*lambdarho(5),'%8.2f'))
@@ -689,12 +682,16 @@ end
 set(handles.f1calc,'string',num2str(f(1),'%8.0f'))
 set(handles.f3calc,'string',num2str(f(3),'%8.0f'))
 set(handles.f5calc,'string',num2str(f(5),'%8.0f'))
-set(handles.f1fs,'string',num2str(real(delfstar(d(1),phi)),'%8.3f'))
-set(handles.f3fs,'string',num2str(real(delfstar(d(3),phi)),'%8.3f'))
-set(handles.f5fs,'string',num2str(real(delfstar(d(5),phi)),'%8.3f'))
 set(handles.g1calc,'string',num2str(g(1),'%8.0f'))
 set(handles.g3calc,'string',num2str(g(3),'%8.0f'))
 set(handles.g5calc,'string',num2str(g(5),'%8.0f'))
+        handles.deldatadata([1:3],2) = f(1:2:5);
+        handles.deldatadata([1:3],4) = g(1:2:5);
+        redrawtable(hObject, handles);
+set(handles.f1fs,'string',num2str(real(delfstar(d(1),phi)),'%8.3f'))
+set(handles.f3fs,'string',num2str(real(delfstar(d(3),phi)),'%8.3f'))
+set(handles.f5fs,'string',num2str(real(delfstar(d(5),phi)),'%8.3f'))
+
 set(handles.lambdarho1,'string',num2str(1e3*lambdarho(1),'%8.2f'))
 set(handles.lambdarho3,'string',num2str(1e3*lambdarho(3),'%8.2f'))
 set(handles.lambdarho5,'string',num2str(1e3*lambdarho(5),'%8.2f'))
@@ -1094,6 +1091,7 @@ if strcmp(str(1),'-') && strcmp(str(2),',')
 end
 
 function cursor_Callback(hObject, eventdata, handles)
+handles.deldatadata = NaN(4,4)
 handles.activenh = getactivenh(handles);
 checksolveharms(hObject, handles);
 disp('Left mouse button picks points.')
@@ -1101,12 +1099,12 @@ disp('Right mouse button picks last point.')
 but = 1;
 k=0; % keeps track of the number of points
 try
-struct2var(handles.din);
+    struct2var(handles.din);
 catch Err
     if strcmp('MATLAB:nonExistentField', Err.identifier)
-       warning = warndlg('The data was not saved correctly. Please reload the file')
-       uiwait(warning)
-       changeqcmfile_Callback(hObject, eventdata, handles)     
+        warning = warndlg('The data was not saved correctly. Please reload the file')
+        uiwait(warning)
+        changeqcmfile_Callback(hObject, eventdata, handles)
     end
 end
 
@@ -1126,17 +1124,16 @@ while but == 1
     [time,~,but] = ginput(1);
     timefactor = handles.plotting.timefactor;
     for nh=handles.activenh.on
-        nhstr=num2str(nh);
-        df=interp1(qcmt,cleandelf(:,nh),time*timefactor);
-        dg=interp1(qcmt,cleandelg(:,nh),time*timefactor);
-        set(handles.(['f',nhstr,'exp']),'string',num2str(df,'%6.0f'))
-        set(handles.(['g',nhstr,'exp']),'string',num2str(dg,'%6.0f'))
+        df = interp1(qcmt,cleandelf(:,nh),time*timefactor);
+        dg = interp1(qcmt,cleandelg(:,nh),time*timefactor);
+        handles.deldatadata(ceil(nh/2),1) = df;
+        handles.deldatadata(ceil(nh/2),3) = dg;
     end
     for nh=handles.activenh.off
-        nhstr=num2str(nh);
-        set(handles.(['f',nhstr,'exp']),'string','-')
-        set(handles.(['g',nhstr,'exp']),'string','-')
+        handles.deldatadata(ceil(nh/2),1) = NaN;
+        handles.deldatadata(ceil(nh/2),3) = NaN;
     end
+    redrawtable(hObject, handles);
     if get(handles.autosolve,'value')
         for m = mnumber
             outputs{k,m} = findsolution(hObject, eventdata, handles, time, nhvals{m});
@@ -1305,9 +1302,10 @@ struct2var(handles.din);
 [~,handles.datapoints]=size(qcmt);
 for k=1:handles.datapoints;
     for nh=handles.activenh.on
-        set(handles.(['f',num2str(nh),'exp']),'string',num2str(cleandelf(k,nh),'%6.0f'))
-        set(handles.(['g',num2str(nh),'exp']),'string',num2str(cleandelg(k,nh),'%6.0f'))
+        handles.deldatadata(ceil(nh/2),1) = cleandelf(k,nh);
+        handles.deldatadata(ceil(nh/2),3) = cleandelg(k,nh);
     end
+    redrawtable(hObject, handles);
     for m = mnumber
         outputs{k,m}=findsolution(hObject, eventdata, handles,qcmt(k),nhvals{m});
         if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
@@ -2011,12 +2009,9 @@ end
 
 function [drhoe grhoe phie] = finderror(hObject, handles, nh)
 % Calculates the error in a measurement.
-for nhs=handles.activenh.on
-    fname=['f',num2str(nhs),'exp'];
-    gname=['g',num2str(nhs),'exp'];
-    dfi(nhs)=str2num(get(handles.(fname),'string'));
-    dgi(nhs)=str2num(get(handles.(gname),'string'));
-end
+nhs=handles.activenh.on;
+dfi(nhs) = handles.deldatadata(ceil(nhs/2),1);
+dgi(nhs) = handles.deldatadata(ceil(nhs/2),3);
 
 errorsf = handles.din.bare.error.f;
 errorsg = handles.din.bare.error.g;
@@ -2387,46 +2382,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function g5exp_Callback(hObject, eventdata, handles)
-function g5exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function g3exp_Callback(hObject, eventdata, handles)
-
-function g3exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function g1exp_Callback(hObject, eventdata, handles)
-
-function g1exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function f5exp_Callback(hObject, eventdata, handles)
-
-function f5exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function f3exp_Callback(hObject, eventdata, handles)
-
-function f3exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function f1exp_Callback(hObject, eventdata, handles)
-function f1exp_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
 function accesshandles_Callback(hObject, eventdata, handles)
 keyboard;
 
@@ -2459,3 +2414,23 @@ function hideplots_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 set(handles.calcdataplotspanel, 'visible', 'off')
+
+
+% --- Executes when entered data in editable cell(s) in deldata.
+function deldata_CellEditCallback(hObject, eventdata, handles)
+% hObject    handle to deldata (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.CONTROL.TABLE)
+%	Indices: row and column indices of the cell(s) edited
+%	PreviousData: previous data for the cell(s) edited
+%	EditData: string(s) entered by the user
+%	NewData: EditData or its converted form set on the Data property. Empty if Data was not changed
+%	Error: error string when failed to convert EditData to appropriate value for Data
+% handles    structure with handles and user data (see GUIDATA)
+handles.deldatadata(eventdata.Indices) = eventdata.NewData;
+handles = redrawtable(hObject, handles);;
+guidata(hObject,handles);
+
+function handles = redrawtable(hObject, handles);
+for i = 1:16
+    handles.deldata.Data(i) = {num2str(handles.deldatadata(i),'%8.0f')};
+end
