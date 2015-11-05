@@ -186,7 +186,7 @@ xlimits2 = xlim(handles.main.axes2);
 
 delf = handles.main.din.cleandelf;
 delg = handles.main.din.cleandelg;
-qcmt = handles.main.din.qcmt;
+qcmt = handles.main.din.qcmt/handles.main.plotting.timefactor;
 %Define linestyle for the three different harmonics.
 linestyle = [{'o-r'},{'o-b'},{'o-g'}];
 %Goes through the three harmonics and plots them if desired. I couldn't
@@ -281,18 +281,23 @@ catch Err
     if strcmp(Err.identifier, 'MATLAB:nonExistentField')
         switch get(handles.main.xlabeltext,'value')
             case 1
+                handles.main.plotting.unit = 'min';
                 handles.main.plotting.xlabeltext = 't (min.)';
                 handles.main.plotting.timefactor = 1;
             case 2
+                handles.main.plotting.unit = 'hr';
                 handles.main.plotting.xlabeltext = 't (hr.)';
                 handles.main.plotting.timefactor = 60;
             case 3
+                handles.main.plotting.unit = 'day';
                 handles.main.plotting.xlabeltext = 't (day)';
                 handles.main.plotting.timefactor = 1440;
             case 4
+                handles.main.plotting.unit = 'month';
                 handles.main.plotting.xlabeltext = 't (month)';
                 handles.main.plotting.timefactor = 43830; % month of 30.4 days.
             case 5
+                handles.main.plotting.unit = 'year';
                 handles.main.plotting.xlabeltext = 't (year)';
                 handles.main.plotting.timefactor = 525969; % Sidereal year. I had to pick one.
         end
