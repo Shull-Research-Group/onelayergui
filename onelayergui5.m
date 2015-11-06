@@ -697,7 +697,9 @@ mnumber = getnhvals(handles);
 handles.propertytable.Data(1,5)={['sim']};
 handles.propertytable.Data(2,1:3) = {'-'};
 handles.contourplots = contourplots;
-finderror(hObject, handles, handles.constants.nhvals{mnumber(1)})
+if get(handles.calcerror, 'value')
+    finderror(hObject, handles, handles.constants.nhvals{mnumber(1)})
+end
 guidata(hObject, handles);
 
 function F = fstar(x,nh,harmratio,dissratio, refn)
@@ -2098,7 +2100,6 @@ zq=handles.constants.zq;
 options = optimset('Display','off');
 
 x0(1) = str2double(handles.propertytable.Data(1,3));
-% dfield=['d',num2str(nhi(1)),'calc'];
 x0(2) = str2double(handles.deldatatable.Data{1,8});
 
 dissratio=dg(nhi(3))/df(nhi(3));
@@ -2461,11 +2462,109 @@ grho = grhoref*(n^(phi/90))/(refn^(phi/90));
 function dl = dlf(refn, n, dlin, phi)
 dl = dlin*(n/refn)^(1-(phi/180));
 
+function thickness_Callback(hObject, eventdata, handles)
+%This function creates a figure containing a table displaying the
+%preferences for finding the resonance peaks
+close(figure(996)); figure(996); %close window if open
+pos=get(figure(996),'position');
+set(figure(996),'position',[pos(1)/1 pos(2)/1 pos(3)/1 pos(4)/1.5]); %Set window size
+set(figure(996),'menubar','none','toolbar','none','numbertitle','off','name','Optimum thickness calculator');
+%axes('Position',[0.1,0.1,0.5,0.8])
 
+%Create label and input box for the maximum dissipation
+max_dg = uicontrol('style','edit','string','10','units','normalized',...
+    'position',[0.75 0.85 .25 .1]);
+uicontrol('style','text','string','max DG (kHz)','units','normalized',...
+    'position',[0.3 0.82 .14 .1]);
 
+%Create label and input box for the maximum thickness
+max_drho = uicontrol('style','edit','string','10','units','normalized',...
+    'position',[0.75 0.75 .25 .1]);
+uicontrol('style','text','string','max dp (g/m^2)','units','normalized',...
+    'position',[0.3 0.72 .14 .1]);
 
+%Create label and input box for the phase angle
+%It defaults to the current phase angle in onelayergui
+phi = uicontrol('style','edit','string',handles.propertytable.Data{1,3},'units','normalized',...
+    'position',[0.75 0.65 .25 .1]);
+uicontrol('style','text','string','Phi','units','normalized',...
+    'position',[0.3 0.62 .14 .1]);
 
+%Create label and pull-down for the modulus reference harmonic
+%It defaults to the value in onelayergui
+ref_G = uicontrol('style','popup','string',{'<html>G<sub>1</sub></html>',...
+    '<html>G<sub>3</sub></html>', '<html>G<sub>5</sub></html>',...
+    '<html>G<sub>7</sub></html>'},'value', get(handles.modulustoplot, 'value'),...
+    'units','normalized', 'position',[0.75 0.55 .25 .1]);
+uicontrol('style','text','string','Reference G','units','normalized',...
+    'position',[0.3 0.52 .14 .1]);
 
+%Create label and input box for the modulus
+%It defaults to the current modulus in onelayergui
+grho = uicontrol('style','edit','string',handles.propertytable.Data{1,2},'units','normalized',...
+    'position',[0.75 0.45 .25 .1]);
+uicontrol('style','text','string','|G*|p (Pa-g/cm^3)','units','normalized',...
+    'position',[0.3 0.42 .2 .1]);
 
+%Create check boxes for the different harmonics
+nh1 = uicontrol('style','checkbox','string','5MHz','units','normalized',...
+    'position',[0.3 0.35 .1 .1]);
+nh3 = uicontrol('style','checkbox','string','15MHz','units','normalized',...
+    'value', 1, 'position',[0.4 0.35 .1 .1]);
+nh5 = uicontrol('style','checkbox','string','25MHz','units','normalized',...
+    'value', 1, 'position',[0.5 0.35 .1 .1]);
+nh7 = uicontrol('style','checkbox','string','35MHz','units','normalized',...
+    'position',[0.6 0.35 .1 .1]);
+
+calcmax = uicontrol('style','text','string','Max drho:','units','normalized',...
+    'position',[0.5 0.20 .2 .1]); %Displays the maximum thickness 
+
+%Initializes button and callback for the Calculate button
+uicontrol('style','push','string','Calculate','units','normalized',...
+    'position',[0.3 0.20 .1 .1],'callback',{@maxthicknesscalc_Callback,...
+    max_dg, max_drho, phi, ref_G, grho, nh1, nh3, nh5, nh7, calcmax});
+
+function maxthicknesscalc_Callback(hObject, ~, max_dg, max_drho, phi, ref_G, grho, nh1, nh3, nh5, nh7, calcmax)
+%This function calculates the maximum thickness that a film can be before
+%the dissipation of a particular harmonic reaches a critical
+%threshhold--usually 10,000Hz, but this can be changed. This function does
+%not take into account decay length limitations on the thickness for mass
+%sensitivity and does not explore possibilities beyond the dissipation
+%spike at d/lambda = 0.25.
+
+% Get which harmonics the user is concerned about
+nh = [1 3 5 7];
+nh = nh(logical([get(nh1, 'value') get(nh3, 'value') get(nh5, 'value') get(nh7, 'value')]));
+if isempty(nh)
+    warndlg('You forgot to select harmonics to look at')
+    return
+end
+grhoi = str2num(get(grho, 'string'))*1000; %Get modulus in the right units
+phii = str2num(get(phi, 'string')); %Get phi
+refn = itonh(get(ref_G, 'value')); %Get refn
+maxdrho = str2num(get(max_drho, 'string'))*0.001; %Get maxdrho
+maxdg = str2num(get(max_dg, 'string'))*1000; %Get max dissipation
+
+% Returns if any values are either empty or otherwise not numbers
+if isempty(grhoi) || isempty(phii)
+    warndlg('Please give a valid value for the physical parameters')
+    return
+end
+
+for n = nh
+    lambdarhon = lambdarhof(refn, n, grhoi, phii); %Lambda rho for the harmonic of interest
+    drho = 0.001*0.1; % Initialize for while loop starting at .1g/m^2
+    delfstarc = 0;
+    % Loops over increasing thicknesses to find when the dissipation
+    % becomes to great
+    while imag(delfstarc) < maxdg && drho < maxdrho
+        drho = drho + 0.000025; % This sets the increment -- resolution is to the 0.025g/m^2
+        dl = drho./lambdarhon; %Updates dl based on the new drho
+        delfstarc = sauerbrey(n,drho)*delfstar(dl, phii); %Calculates the frequency and dissipation     
+    end
+    d(n) = (drho-0.000025)*1000;
+end
+%Displays the maximum thickness 
+set(calcmax, 'string', ['Max drho: ' num2str(min(d(d~=0))) 'g/m^2']) 
 
 
