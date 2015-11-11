@@ -530,151 +530,60 @@ nhon = handles.activenh.on;
 df(nhon) = handles.deldatadata(nhtoi(nhon),1);
 dg(nhon) = handles.deldatadata(nhtoi(nhon),3);
 
-%This if statement determines if one of the points used in the evaluation
-%was not collected (turned into NaN). If there is a NaN, this turned that
-%data point into a whole set of NaN's so it won't plot.
-if sum(isnan(df(nhset(1:3)))) > 0 %That is, if one of the values is NaN
-    outputs = blankoutput(max(nhon));
-    outputs.time=time;
-    outputs.error = 2.5;
+refG = itonh(get(handles.modulustoplot, 'value'));
+[outputs, handles] = solvedfstar(df, dg, mnumber, hObject, handles, refG);
+
+if outputs.error ~= 1 %Possible reasons for solving incorrectly
     handles.propertytable.Data(1,5)={'not solved'};
-    set(handles.statusbar, 'string', ['Did not solve at time ' num2str(time) ' using ratio '...
-        num2str(nhset(1)) ':' num2str(nhset(2)) ',' num2str(nhset(3))...
-        ' because some data was NaN'], 'BackgroundColor', 'yellow')
-else
-    f1=handles.constants.f1;
-    zq=handles.constants.zq;
-    dissratio=dg(nhset(3))/df(nhset(3));
-    harmratio=nhset(1)*df(nhset(2))/(nhset(2)*df(nhset(1)));
-    % take initial guesses from simulation parameters
-    phi=str2double(handles.propertytable.Data(1,3));
-    grho=1000*str2double(handles.propertytable.Data(1,2)); %Pa kg/m^3
-    refG = itonh(get(handles.modulustoplot, 'value'));
-    drho = 0.001*str2double(handles.propertytable.Data(1,1)); %kg/m^2
-    lrho = lambdarhof(refG, refG, grho, phi); %for n=refn, kg/m^2
-    x0(1) = phi;
-    x0(2) = drho/lrho; %d/lambda
-    
-    ftosolve = @(x) fstar(x, nhset, harmratio, dissratio, refG)*10;
-    try
-        options = optimset('Display','off');
-        [x,fval, exitflag] = fsolve(ftosolve,x0,options); % Call solver
-    catch MExc
-        % Sometimes the fields aren't properly loaded. This tries again.
-        if strcmp(MExc.identifier,  'optim:trustnleqn:UsrObjUndefAtX0')
-            Sim_Callback(hObject, eventdata, handles)
-            x0(1) = str2double(handles.propertytable.Data(1,3));
-            x0(2) = str2double(handles.deldatatable.Data{1,8});
-            options = optimset('Display','off');
-            try
-                [x,fval, exitflag] = fsolve(ftosolve,x0,options); %Try to call solver again.
-            catch Err
-                %This catch attempts to fix d/lambda values that are out of
-                %whack because the mass has increased too far.
-                if strcmp(MExc.identifier,  'optim:trustnleqn:UsrObjUndefAtX0')
-                    if x0(2) == 0 || isnan(x0(2))
-                        x0(2) = .15;
-                    end
-                    
-                    try
-                        [x,fval, exitflag] = fsolve(ftosolve,x0,options);
-                    catch Err3
-                        exitflag = 1.5;
-                    end
-                else
-                    rethrow(Err)
-                end
-            end
-        else
-            rethrow(MExc)
-        end
+    if outputs.error == 2.5 % Some data NaN
+        set(handles.statusbar, 'string', ['Did not solve at time ' ...
+            num2str(time) ' using ratio ' num2str(nhset(1)) ':' ...
+            num2str(nhset(2)) ',' num2str(nhset(3)) ...
+            ' because some data was NaN'], 'BackgroundColor', 'yellow')
+    elseif outputs.error == 3.5 % Phi > 90
+        set(handles.statusbar, 'string', ['Did not solve at time ' ...
+            num2str(time) ' using ratio ' num2str(nhset(1)) ':' ...
+            num2str(nhset(2)) ',' num2str(nhset(3)) ...
+            ' because phi out of range'], 'BackgroundColor', 'yellow')
+    elseif outputs.error == 1.5 % Misc error related to fsolve
+        set(handles.statusbar, 'string', ['Did not solve at time ' ...
+            num2str(time) ' using ratio ' num2str(nhset(1)) ':' ...
+            num2str(nhset(2)) ',' num2str(nhset(3)) ...
+            ' because unable to solve due to error in fsolve'],...
+            'BackgroundColor', 'yellow')
+    else % Other errors from fsolve--0, 2, etc.
+        set(handles.statusbar, 'string', ['Did not solve at time ' ...
+            num2str(time) ' using ratio ' num2str(nhset(1)) ':' ...
+            num2str(nhset(2)) ',' num2str(nhset(3)) ' with error ' ...
+            num2str(outputs.error)], 'BackgroundColor', 'yellow')
     end
-    outputs.error = exitflag;
+else
+    % update the data table on the gui with the updated values (but only if
+    % it solved correctly)
+    handles.propertytable.Data(1,1)={num2str(outputs.drho,'%8.4f')};
+    handles.propertytable.Data(1,2)={num2str(outputs.grho(refG),'%8.3e')};
+    handles.propertytable.Data(1,3)={num2str(outputs.phi,'%8.2f')};
+    handles.propertytable.Data(1,5)={[num2str(nhset(1)) ':' num2str(nhset(2)) ',' num2str(nhset(3))]};
     
-    %If the function did not solve satisfactorily (exitflag ~= 1), set data
-    %to NaNs also.
-    if exitflag ~= 1
-        outputs = blankoutput(max(nhon));
-        outputs.time = time;
-        
-        handles.propertytable.Data(1,5)={'not solved'};
-        set(handles.statusbar, 'string', ['Did not solve at time ' num2str(time) ' using ratio '...
-            num2str(nhset(1)) ':' num2str(nhset(2)) ',' num2str(nhset(3))...
-            ' with error ' num2str(exitflag)], 'BackgroundColor', 'yellow')
-        % Also discard data if the phi value is impossible.
-    elseif x(1) > 90
-        outputs = blankoutput(max(nhon));
-        outputs.time = time;
-        
-        handles.propertytable.Data(1,5)={'not solved'};
-        set(handles.statusbar, 'string', ['Did not solve at time ' num2str(time) ' using ratio '...
-            num2str(nhset(1)) ':' num2str(nhset(2)) ',' num2str(nhset(3))...
-            ' because phi out of range '], 'BackgroundColor', 'yellow')
-        outputs.error = 2.5;
-    else %Exit flag was 1 -- properly solved
-        phi=x(1); %#ok<*SAGROW>
-        dref=x(2); %d/lambda with respect to refG
-        
-        refnh = nhset(1); %This ref needs to be a harmonic for which values were used, 
-        % but it may not be the same as dref
-        drefnh = dlf(refG, refnh, dref, phi);
-        drho(1:2:7) = (df(refnh)/real(delfstar(drefnh,phi)))*zq/(2*refnh*f1^2); %calculate reference drho based on n2
-        grho(refG) = ((drho(refnh)/dref)*refG*f1*cosd(phi/2))^2;
-        
-        if grho(refnh) > 1e13
-            keyboard
-        end
-            
-        for nh = 1:2:7 %Calculate for everything
-            d(nh)=dref*(nh/nhset(1))^(1-phi/180);
-            grho(nh)=grho(refG)*(nh/refG)^(phi/90);
-            dfcalc(nh)=sauerbrey(nh,drho(nh))*real(delfstar(d(nh),phi));
-            dgcalc(nh)=sauerbrey(nh,drho(nh))*imag(delfstar(d(nh),phi));
-            lambdarho(nh)=drho(nh)/(d(nh));
-        end
-        
-        decaylength(nhon) = lambdarho(nhon)*(1/(2*pi))*cotd(phi/2); %Calculate the decay length
-        maxnh = max(nhset(1:3)); %Get maximum harmonic in calculation
-        drho(drho > decaylength(maxnh)*0.9) = NaN;
-        
-        if get(handles.calcerror, 'value') == 1 && length(unique(nhset(1:3))) < 3 %No error calc yet for 1:3,5 etc.
-            [drhoe grhoe phie] = finderror(hObject, handles, nhset);
-            outputs.grhoe = grhoe;
-            outputs.drhoe = drhoe;
-            outputs.phie = phie;
-        else
-            outputs.grhoe = NaN;
-            outputs.drhoe = NaN;
-            outputs.phie = NaN;
-            handles.propertytable.Data(2,1:3)={'-','-','-'};
-        end
-        
-        % update the data table on the gui with the updated values
-        drho=drho*1e3; % convert to g/m^2
-        grho=grho*1e-3;  % convert to Pa-g/cm^3
-        handles.propertytable.Data(1,1)={num2str(drho(refG),'%8.4f')};
-        handles.propertytable.Data(1,2)={num2str(grho(refG),'%8.3e')};
-        handles.propertytable.Data(1,3)={num2str(phi,'%8.2f')};
-        
-        [contourplots, handles] = redrawtable(hObject, handles, mnumber);
-        
-        handles.propertytable.Data(1,5)={[num2str(nhset(1)) ':' num2str(nhset(2)) ',' num2str(nhset(3))]};
-        
-        % add values to the output structure
-        outputs.df=df;
-        outputs.dg=dg;
-        outputs.drho=drho;
-        outputs.grho=grho;
-        outputs.phi=phi;
-        outputs.dfcalc=dfcalc;
-        outputs.dgcalc=dgcalc;
-        outputs.time=time;
-        outputs.d = d;
-        
-        assignin('base','solveouptus',outputs)
-        assignin('caller','contourplots',contourplots)
+    [contourplots, handles] = redrawtable(hObject, handles, mnumber, outputs);
+    assignin('caller','contourplots',contourplots)
+    if get(handles.calcerror, 'value') == 1 && length(unique(nhset(1:3))) < 3 %No error calc yet for 1:3,5 etc.
+        [drhoe grhoe phie] = finderror(hObject, handles, mnumber);
+        outputs.grhoe = grhoe;
+        outputs.drhoe = drhoe;
+        outputs.phie = phie;
+    else
+        outputs.grhoe = NaN;
+        outputs.drhoe = NaN;
+        outputs.phie = NaN;
+        handles.propertytable.Data(2,1:3)={'-','-','-'};
     end
 end
+
+outputs.time = time;
+guidata(hObject, handles); %Saves new handles.
+
+
 
 function Sim_Callback(hObject, eventdata, handles)
 set(handles.statusbar, 'string', '', 'BackgroundColor', 'default')
@@ -695,10 +604,11 @@ end
 mnumber = getnhvals(handles);
 [contourplots, handles] = redrawtable(hObject, handles, mnumber(1));
 handles.propertytable.Data(1,5)={['sim']};
-handles.propertytable.Data(2,1:3) = {'-'};
 handles.contourplots = contourplots;
 if get(handles.calcerror, 'value')
-    finderror(hObject, handles, handles.constants.nhvals{mnumber(1)})
+    finderror(hObject, handles, mnumber(1))
+else
+    handles.propertytable.Data(2,1:3) = {'-'};
 end
 guidata(hObject, handles);
 
@@ -1312,7 +1222,7 @@ for k=1:handles.datapoints;
             %             end
         end
     end
-    if mod(k,500)==0
+    if mod(k,100)==0
         outputstructure = reformatdata(handles, outputs);
         handles.dout = outputstructure;
         handles = plotvalues(hObject,handles);
@@ -2012,7 +1922,8 @@ if length(nhsel) < 4
     end
 end
 
-function [drhoe grhoe phie] = finderror(hObject, handles, nh)
+function [drhoe grhoe phie] = finderror(hObject, handles, mnumber)
+nh = handles.constants.nhvals{mnumber};
 % Calculates the error in a measurement.
 try
     nhs=handles.activenh.on;
@@ -2024,11 +1935,13 @@ catch Err
         rethrow(Err)
     end
 end
+
 refG = itonh(get(handles.modulustoplot, 'value'));
-if get(handles.issim, 'value')
+
+if get(handles.issim, 'value') %Use the editable "calc" values
     dfi(nhs) = handles.deldatadata(ceil(nhs/2),2);
     dgi(nhs) = handles.deldatadata(ceil(nhs/2),4);
-else
+else %Use the values stored in the function
     dfi(nhs) = handles.deldatadata(ceil(nhs/2),1);
     dgi(nhs) = handles.deldatadata(ceil(nhs/2),3);
 end
@@ -2048,11 +1961,14 @@ for i = 1:6
     df(nh(2)) = dfi(nh(2)) + shifts(l);
     dg(nh(3)) = dgi(nh(3)) + shifts(m);
     
-    results = SolveQCM(df, dg, nh, hObject, handles, refG); %Unit conversions have already been done
-    if results(4) == 1 && results(3) < 10^10 && results(1) > 0
-        phi(k, l, m) = results(1);
-        drho(k, l, m) = results(2);
-        grho(k, l, m) = results(3);
+    outputs = solvedfstar(df, dg, mnumber, hObject, handles, refG);
+    phis = outputs.phi;
+    drhos = outputs.drho;
+    grhos = outputs.grho(refG); %Unit conversions have already been done
+    if outputs.error == 1 && grhos < 10^10 && phis > 0
+        phi(k, l, m) = phis;
+        drho(k, l, m) = drhos;
+        grho(k, l, m) = grhos;
     else
         phi(k, l, m) = NaN;
         drho(k, l, m) = NaN;
@@ -2082,60 +1998,110 @@ handles.propertytable.Data{2,1} = num2str(pdrho, '%8.2f');
 handles.propertytable.Data{2,2} = num2str(pgrho, '%8.2f');
 handles.propertytable.Data{2,3} = num2str(pphi, '%8.2f');
 
-function data = SolveQCM(dfi, dgi, nhi, hObject, handles, refn)
+function [outputs, handles] = solvedfstar(dfi, dgi, mnumber, hObject, handles, refn)
 %SolveQCM takes the frequency and dissipation inputs, along with the
 %reference angles and guesses about the properties of the film, to
 %calculate the actual properties of the film.
-df = dfi;
-dg = dgi;
+nhi = handles.constants.nhvals{mnumber};
 
-f1=handles.constants.f1;
-zq=handles.constants.zq;
-% dgn3dfn3=dg(nhi(3))/df(nhi(3));
-% dfn2dfn1=nhi(1)*df(nhi(2))/(nhi(2)*df(nhi(1)));
-% take initial guesses from simulation parameters
-
-%Tell the output not to display. I'll make separate errors based on the
-%exitflags.
-options = optimset('Display','off');
-
-x0(1) = str2double(handles.propertytable.Data(1,3));
-x0(2) = str2double(handles.deldatatable.Data{1,8});
-
-dissratio=dg(nhi(3))/df(nhi(3));
-harmratio=nhi(1)*df(nhi(2))/(nhi(2)*df(nhi(1)));
-
-if ~isnan(harmratio) && ~isnan(dissratio) && sum(isnan(x0)) == 0
-    ftosolve = @(x) fstar(x,nhi,harmratio,dissratio, refn);
-    [x,fval,exitflag] = fsolve(ftosolve,x0,options); % Call solver
+%This if statement determines if one of the points used in the evaluation
+%was not collected (turned into NaN). If there is a NaN, this turned that
+%data point into a whole set of NaN's so it won't plot.
+if sum(isnan(dfi(nhi(1:3)))) > 0 %That is, if one of the values is NaN
+    outputs = blankoutput();
+    outputs.error = 2.5;
+    handles.propertytable.Data(1,5)={'not solved'};
+    
 else
-    exitflag = 0;
+    f1=handles.constants.f1;
+    zq=handles.constants.zq;
+    dissratio=dgi(nhi(3))/dfi(nhi(3));
+    harmratio=nhi(1)*dfi(nhi(2))/(nhi(2)*dfi(nhi(1)));
+    % take initial guesses from simulation parameters
+    phi=str2double(handles.propertytable.Data(1,3));
+    grho=1000*str2double(handles.propertytable.Data(1,2)); %Pa kg/m^3
+    
+    drho = 0.001*str2double(handles.propertytable.Data(1,1)); %kg/m^2
+    lrho = lambdarhof(refn, refn, grho, phi); %for n=refn, kg/m^2
+    x0(1) = phi;
+    x0(2) = drho/lrho; %d/lambda
+    
+    ftosolve = @(x) fstar(x, nhi, harmratio, dissratio, refn)*10;
+    try
+        options = optimset('Display','off');
+        [x,fval, exitflag] = fsolve(ftosolve,x0,options); % Call solver
+    catch MExc
+        if isnan(harmratio) || isnan(dissratio) % Happens if df or dg is 0
+            exitflag = 2.5;
+        else
+            % Sometimes the fields aren't properly loaded. This tries again.
+            if strcmp(MExc.identifier,  'optim:trustnleqn:UsrObjUndefAtX0')
+                redrawtable(hObject, handles, mnumber)
+                x0(1) = str2double(handles.propertytable.Data(1,3));
+                x0(2) = str2double(handles.deldatatable.Data{1,8});
+                options = optimset('Display','off');
+                try
+                    [x,fval, exitflag] = fsolve(ftosolve,x0,options); %Try to call solver again.
+                catch Err
+                    %This catch attempts to fix d/lambda values that are out of
+                    %whack because the mass has increased too far.
+                    if strcmp(MExc.identifier,  'optim:trustnleqn:UsrObjUndefAtX0')
+                        if x0(2) == 0 || isnan(x0(2))
+                            x0(2) = .15;
+                        end
+                        try
+                            [x,fval, exitflag] = fsolve(ftosolve,x0,options);
+                        catch Err3
+                            exitflag = 1.5;
+                        end
+                    else
+                        rethrow(Err)
+                    end
+                end
+            else
+                rethrow(MExc)
+            end
+        end
+    end
+        
+    %If the function did not solve satisfactorily (exitflag ~= 1), set data
+    %to NaNs also.
+    if exitflag ~= 1
+        outputs = blankoutput();
+        outputs.error = exitflag;        
+        % Also discard data if the phi value is impossible.
+    elseif x(1) > 90
+        outputs = blankoutput();    
+        outputs.error = 3.5;
+    else %Exit flag was 1 -- properly solved
+        phi=x(1); %#ok<*SAGROW>
+        dref=x(2); %d/lambda with respect to refG
+        
+        refnh = nhi(1); %This ref needs to be a harmonic for which values were used, 
+        % but it may not be the same as dref
+        drefnh = dlf(refn, refnh, dref, phi);
+        drho = (dfi(refnh)/real(delfstar(drefnh,phi)))*zq/(2*refnh*f1^2); %calculate reference drho based on n2
+        grho(refn) = ((drho/dref)*refn*f1*cosd(phi/2))^2;
+        
+        if grho(refnh) > 1e13
+            disp('Grho is too large. Check input values')
+            keyboard
+        end
+            
+        outputs = calculatevalues(handles, drho*1000, grho(refn)*0.001, phi, refn);
+        
+        decaylength(1:2:7) = outputs.lrho(1:2:7)*(1/(2*pi))*cotd(phi/2); %Calculate the decay length
+        maxnh = max(nhi(1:3)); %Get maximum harmonic in calculation
+        outputs.drho(outputs.drho*1e-3 > decaylength(maxnh)*0.9) = NaN;
+        
+        % add values to the output structure
+        outputs.df=dfi;
+        outputs.dg=dgi;
+        outputs.error = exitflag;
+           
+        assignin('base','solveouptus',outputs)
+    end
 end
-
-if exitflag ~= 1
-    x(1) = NaN;
-    x(2) = NaN;
-end
-phi=x(1);
-dref=x(2); 
-
-for nh=[nhi(1) nhi(2)]
-    d(nh)=dref*(nh/nhi(1))^(1-phi/180);
-    drho(nh)=(df(nh)/real(delfstar(d(nh),phi)))*zq/(2*nh*f1^2);  %#ok<*AGROW>
-    grho(nh)=((drho(nh)/d(nh))*nh*f1*cosd(phi/2))^2;
-    dfcalc(nh)=sauerbrey(nh,drho(nh))*real(delfstar(d(nh),phi));
-    dgcalc(nh)=sauerbrey(nh,drho(nh))*imag(delfstar(d(nh),phi));
-    lambdarho(nh)=drho(nh)/(d(nh));
-end
-
-refG = itonh(get(handles.modulustoplot, 'value'));
-if refG ~= nhi(1) && refG ~= nhi(2)
-    drho(refG) = NaN;
-    grho(refG) = NaN;
-end
-drho=drho*1e3; % convert to g/m^2
-grho=grho*1e-3;  % convert to Pa-g/cm^3
-data = [phi, drho(refG), grho(refG), exitflag];
 
 function calcerror_Callback(hObject,eventdata,handles)
 handles.propertytable.Data{2,1} = '-';
@@ -2253,11 +2219,10 @@ function loggamma_Callback(hObject, eventdata, handles)
     end
 handles.axes2.YScale = axistype;
 
-function [contourplots, handles] = redrawtable(hObject, handles, mnumber)
-refG = itonh(get(handles.modulustoplot, 'value'));
-phi = str2double(handles.propertytable.Data(1,3));
-grhoref = 1000*str2double(handles.propertytable.Data(1,2));
-drho = 0.001*str2double(handles.propertytable.Data(1,1));
+function outputs = calculatevalues(handles, drho, grhoref, phi, refG)
+drho = 0.001*drho;
+grhoref = 1000*grhoref;
+
 Zq = handles.constants.zq;
 f1 = handles.constants.f1;
 
@@ -2273,15 +2238,37 @@ for n = [1,3,5,7]
     delginf(n)=(f1/(pi*Zq))*(grho(n))^0.5*cosd(phi/2);
 end
 
-handles.deldatadata(1:4,2) = f(1:2:7);
-handles.deldatadata(1:4,4) = g(1:2:7);
-handles.deldatadata(1:4,5) = dfds(1:2:7);
-handles.deldatadata(1:4,6) = 0.001*grho(1:2:7);
-handles.deldatadata(1:4,7) = 1000*lrho(1:2:7);
-handles.deldatadata(1:4,8) = d(1:2:7);
-handles.deldatadata(1:4,9) = 1000*deltarho(1:2:7);
-handles.deldatadata(1:4,10) = delfinf(1:2:7);
-handles.deldatadata(1:4,11) = delginf(1:2:7);
+outputs.drho = drho*1000;
+outputs.grho = grho*0.001;
+outputs.phi = phi;
+outputs.dfcalc = f;
+outputs.dgcalc = g;
+outputs.d = d;
+outputs.lrho = lrho*1000;
+outputs.deltarho = deltarho*1000;
+outputs.dfds = dfds;
+outputs.delfinf = delfinf;
+outputs.delginf = delginf;
+
+function [contourplots, handles] = redrawtable(hObject, handles, mnumber, outputs)
+refG = itonh(get(handles.modulustoplot, 'value'));
+phi = str2double(handles.propertytable.Data(1,3));
+grhoref = str2double(handles.propertytable.Data(1,2));
+drho = str2double(handles.propertytable.Data(1,1));
+
+if ~exist('outputs', 'var')
+    outputs = calculatevalues(handles, drho, grhoref, phi, refG);
+end
+
+handles.deldatadata(1:4,2) = outputs.dfcalc(1:2:7);
+handles.deldatadata(1:4,4) = outputs.dgcalc(1:2:7);
+handles.deldatadata(1:4,5) = outputs.dfds(1:2:7);
+handles.deldatadata(1:4,6) = outputs.grho(1:2:7);
+handles.deldatadata(1:4,7) = outputs.lrho(1:2:7);
+handles.deldatadata(1:4,8) = outputs.d(1:2:7);
+handles.deldatadata(1:4,9) = outputs.deltarho(1:2:7);
+handles.deldatadata(1:4,10) = outputs.delfinf(1:2:7);
+handles.deldatadata(1:4,11) = outputs.delginf(1:2:7);
 
 formats={'%8.0f','%8.0f','%8.0f','%8.0f','%6.3f','%8.2e','%7.3f','%7.3f','%7.3f','%8.0f','%8.0f'};
 
@@ -2305,15 +2292,6 @@ end
 contourplots = 0;
 % Now plot contours if desired
 if get(handles.plotsolutioncontours, 'value') == 1
-    outputs.df = f;
-    outputs.dg = g;
-    outputs.drho = drho*1000;
-    outputs.grho = grho*0.001;
-    outputs.phi = phi;
-    outputs.dfcalc = f;
-    outputs.dgcalc = g;
-    outputs.d = d;
-    outputs.time = 0;
     for q = mnumber
         contourplots = plotcontours(handles, outputs, q);
     end
@@ -2439,15 +2417,24 @@ function nh = itonh(i)
 %Converts [1 2 3] to [1 3 5]
 nh = i*2-1;
 
-function outputs = blankoutput(maxnh)
+function outputs = blankoutput()
+maxnh = 7;
 outputs.df = NaN(1,maxnh);
 outputs.dg = NaN(1,maxnh);
-outputs.drho = nan(1,maxnh);
-outputs.grho = nan(1,maxnh);
+outputs.drho = NaN;
+outputs.grho = NaN(1,maxnh);
 outputs.phi = NaN;
-outputs.dfcalc = nan(1,maxnh);
-outputs.dgcalc = nan(1,maxnh);
-outputs.d = nan(1,maxnh);
+outputs.grhoe = NaN;
+outputs.drhoe = NaN;
+outputs.phie = NaN;
+outputs.dfcalc = NaN(1,maxnh);
+outputs.dgcalc = NaN(1,maxnh);
+outputs.d = NaN(1,maxnh);
+outputs.lrho = NaN(1,maxnh);
+outputs.deltarho = NaN(1,maxnh);
+outputs.dfds = NaN(1,maxnh);
+outputs.delfinf = NaN(1,maxnh);
+outputs.delginf = NaN(1,maxnh);
 
 function lrho = lambdarhof(refn, n, grho, phi)
 if refn == n
@@ -2459,8 +2446,9 @@ end
 function grho = grhof(refn, n, grhoref, phi)
 grho = grhoref*(n^(phi/90))/(refn^(phi/90));
 
-function dl = dlf(refn, n, dlin, phi)
-dl = dlin*(n/refn)^(1-(phi/180));
+function dl = dlf(refn, refnh, dlin, phi);
+dl = dlin*(refnh/refn)^(1-(phi/180));
+
 
 function thickness_Callback(hObject, eventdata, handles)
 %This function creates a figure containing a table displaying the

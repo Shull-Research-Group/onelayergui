@@ -145,6 +145,8 @@ if isfield(handles, 'currspectime')
     if time - handles.currspectime(1) <= 0.0051
         handles.main.din.cleandelf(handles.currenttimeidx, harmonic) = NaN;
         handles.main.din.cleandelg(handles.currenttimeidx, harmonic) = NaN;
+        handles.main.din.absf(handles.currenttimeidx, harmonic) = NaN;
+        handles.main.din.absg(handles.currenttimeidx, harmonic) = NaN;
     else
         warning('You haven''t updated the spectra')
         return 
@@ -186,7 +188,40 @@ xlimits2 = xlim(handles.main.axes2);
 
 delf = handles.main.din.cleandelf;
 delg = handles.main.din.cleandelg;
+try
 qcmt = handles.main.din.qcmt/handles.main.plotting.timefactor;
+catch Err
+    if strcmp(Err.identifier, 'MATLAB:nonExistentField')
+        switch get(handles.main.xlabeltext,'value')
+            case 1
+                handles.main.plotting.unit = 'min';
+                handles.main.plotting.xlabeltext = 't (min.)';
+                handles.main.plotting.timefactor = 1;
+            case 2
+                handles.main.plotting.unit = 'hr';
+                handles.main.plotting.xlabeltext = 't (hr.)';
+                handles.main.plotting.timefactor = 60;
+            case 3
+                handles.main.plotting.unit = 'day';
+                handles.main.plotting.xlabeltext = 't (day)';
+                handles.main.plotting.timefactor = 1440;
+            case 4
+                handles.main.plotting.unit = 'month';
+                handles.main.plotting.xlabeltext = 't (month)';
+                handles.main.plotting.timefactor = 43830; % month of 30.4 days.
+            case 5
+                handles.main.plotting.unit = 'year';
+                handles.main.plotting.xlabeltext = 't (year)';
+                handles.main.plotting.timefactor = 525969; % Sidereal year. I had to pick one.
+        end
+        xlabeltext = handles.main.plotting.xlabeltext;
+        timefactor = handles.main.plotting.timefactor;
+        qcmt = handles.main.din.qcmt/handles.main.plotting.timefactor;
+    else
+        rethrow(Err)
+    end
+
+end
 %Define linestyle for the three different harmonics.
 linestyle = [{'o-r'},{'o-b'},{'o-g'}];
 %Goes through the three harmonics and plots them if desired. I couldn't
@@ -197,7 +232,11 @@ haveconductance = ~cellfun(@isempty, handles.cond.spectra); %logical 1 if spectr
 %Make this try/catch more robust--better check of how many harmonics there
 %are
 idx = handles.currenttimeidx;
-if max(handles.main.activenh.on) == 5
+if max(handles.main.activenh.on) == 3
+    haveconductance = haveconductance(:,1:3); %eliminates higher harmonics even if present
+    maxharm = 3;
+    timearray = [qcmt(idx) qcmt(idx)];
+elseif max(handles.main.activenh.on) == 5
     haveconductance = haveconductance(:,1:5); %eliminates higher harmonics even if present
     maxharm = 5;
     timearray = [qcmt(idx) qcmt(idx) qcmt(idx)];
@@ -802,8 +841,7 @@ if isfield(handles, 'currspectime')
         handles.cond.spectra{index, harmonic} = newspectra;
         handles.main.din.cleandelf(index, harmonic) = fitdata(1) - handles.main.din.bare.offset.(['f' num2str(harmonic)]);
         handles.main.din.cleandelg(index, harmonic) = fitdata(2) - handles.main.din.bare.offset.(['g' num2str(harmonic)]);
-        % Since this is data from a refitting, also change the complete
-        % data
+        % Since this is data from a refitting, also change the complete data
         handles.main.din.delf(index, harmonic) = fitdata(1) - handles.main.din.bare.offset.(['f' num2str(harmonic)]);
         handles.main.din.delg(index, harmonic) = fitdata(2) - handles.main.din.bare.offset.(['g' num2str(harmonic)]);
         handles.main.din.absf(index, harmonic) = fitdata(1);
@@ -911,8 +949,11 @@ if get(handles.actionrefit, 'value')
                 %Update both regular and clean data since this is a refitting
                 handles.main.din.cleandelf(index, harmonic) = fitdata(1) - handles.main.din.bare.offset.(['f' num2str(harmonic)]);
                 handles.main.din.cleandelg(index, harmonic) = fitdata(2) - handles.main.din.bare.offset.(['g' num2str(harmonic)]);
-                handles.main.din.delf(index, harmonic) = fitdata(1);
-                handles.main.din.delg(index, harmonic) = fitdata(2);
+                % Since this is data from a refitting, also change the complete data
+                handles.main.din.delf(index, harmonic) = fitdata(1) - handles.main.din.bare.offset.(['f' num2str(harmonic)]);
+                handles.main.din.delg(index, harmonic) = fitdata(2) - handles.main.din.bare.offset.(['g' num2str(harmonic)]);
+                handles.main.din.absf(index, harmonic) = fitdata(1);
+                handles.main.din.absg(index, harmonic) = fitdata(2);
                 handles.cond.fits{index, harmonic} = fitdata;
             end
             if index-startidx > calcpercent/100*length(timeidx)
@@ -922,7 +963,6 @@ if get(handles.actionrefit, 'value')
             end
         end
         set(handles.main.statusbar, 'string',['100 percent done with ' num2str(harmonic*5) 'MHz'], 'BackgroundColor', 'green');
-        guidata(hObject,handles) % save data
     end
     %
 else % Since it is a button group, the only other option is to be removing.
