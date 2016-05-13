@@ -21,9 +21,10 @@ end
 % --- Executes just before onelayergui5 is made visible.
 function onelayergui5_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
-handles.mdate.String='m: 11/3//15';
+handles.mdate.String='m: 11/3/15';
 handles.figdate.String='fig: 9/1/15';
 warning('off','MATLAB:Axes:NegativeDataInLogAxis') %Supress warning about negative data
+warning('off','optimlib:lsqlin:AlgAndLargeScaleConflict')
 set(hObject,'toolbar','auto'); %Remove default toolbar
 % Update handles structure
 
@@ -119,11 +120,17 @@ if strcmp(qcmfile(end-7:end-4),'data') %_data.mat
     end
     
     try %Loads reference and error data
-        for i = 1:4
+        for i = 1:nhtoi(length(error.f))
             fref=['f',num2str(itonh(i))];
             gref=['g',num2str(itonh(i))];
-            handles.offsettable.Data(nh,1)={[commanumber(offset.(fref)) setstr(177) num2str(error.f(itonh(i)),'%8.0f')]};
-            handles.offsettable.Data(nh,2)={[commanumber(offset.(gref)) setstr(177) num2str(error.g(itonh(i)),'%8.0f')]};
+            handles.offsettable.Data(i,1)={[commanumber(offset.(fref)) setstr(177) num2str(error.f(itonh(i)),'%8.0f')]};
+            handles.offsettable.Data(i,2)={[commanumber(offset.(gref)) setstr(177) num2str(error.g(itonh(i)),'%8.0f')]};
+        end
+        if length(error.f) < 7
+            handles.offsettable.Data(4,1:2) = {'-'};
+            if length(error.f) < 5
+                handles.offsettable.Data(3,1:2) = {'-'};
+            end
         end
         handles.din.bare.error.f = error.f;
         handles.din.bare.error.g = error.g;
@@ -133,8 +140,7 @@ if strcmp(qcmfile(end-7:end-4),'data') %_data.mat
             offset.(name{n}) = 0;
         end
         handles.offsettable.Data(1:4,1:2) = {'-'};
-        handles.din.bare.error.f = handles.constants.error.f; 
-        handles.din.bare.error.g = handles.constants.error.g; 
+        handles.din.bare.offset = offset;
     end
     
     datasize = size(delf);
@@ -191,7 +197,8 @@ else %not _data.mat files
         
         %This provides the reference data. First it checks if there is a _bare
         %file.
-        [reference errorf errorg] = getreferencedata(handles, qcmpath, filebase, 1); %reference = 0 if unsuccessful
+        filepathbase = [qcmpath filebase];
+        [reference error.f error.g] = getreferencedata(hObject, handles, filepathbase);%, 1); %reference = 0 if unsuccessful
         if length(reference) > 1 %Uses _bare file if possible
             for n=2:7 %Assumes only 3 harmonics were measured. A fair assumption.
                 offset.(name{n}) = reference(n);
@@ -269,7 +276,7 @@ else %not _data.mat files
         
         %Checks for a _bare file to get reference data from, if not, uses
         %freq_shift_ref.
-        [reference errorf errorg] = getreferencedata(hObject, handles, [qcmpath filebase]);
+        [reference error.f error.g] = getreferencedata(hObject, handles, [qcmpath filebase]);
         if length(reference) > 1 %True if there wasn't an error
             for n=2:9
                 if ~isnan(reference(n))
@@ -312,9 +319,8 @@ else %not _data.mat files
             end
         end
         qcmcleandata = qcmdata;
-        errorf = handles.constants.error.f; %Default error
-        errorg = handles.constants.error.g; %Default error
-        
+        error.f = handles.constants.error.f; %Default error
+        error.g = handles.constants.error.g; %Default error        
     end
       
     %Checks if there is 5th and 7th harmonic data 
@@ -333,8 +339,8 @@ else %not _data.mat files
         if any(nhvals==nh)
             fref=['f',num2str(nh)];
             gref=['g',num2str(nh)];
-            handles.offsettable.Data(nhtoi(nh),1)={[commanumber(offset.(fref)) setstr(177) num2str(errorf(nh),'%8.0f')]};
-            handles.offsettable.Data(nhtoi(nh),2)={[commanumber(offset.(gref)) setstr(177) num2str(errorg(nh),'%8.0f')]};
+            handles.offsettable.Data(nhtoi(nh),1)={[commanumber(offset.(fref)) setstr(177) num2str(error.f(nh),'%8.0f')]};
+            handles.offsettable.Data(nhtoi(nh),2)={[commanumber(offset.(gref)) setstr(177) num2str(error.g(nh),'%8.0f')]};
         else
             handles.offsettable.Data(nhtoi(nh),1)={['0' setstr(177) '0']};
             handles.offsettable.Data(nhtoi(nh),2)={['0' setstr(177) '0']};
@@ -376,6 +382,8 @@ else %not _data.mat files
             cleandelg(filter.(fieldname), nh) = NaN;
         end
     end
+    
+
 end
 %Saves all of the processed data into the handles structure.
 handles.din.qcmt = qcmt;
@@ -388,9 +396,16 @@ handles.din.cleandelg = cleandelg;
 handles.din.qcmpath = qcmpath;
 handles.din.qcmfile = qcmfile;
 handles.din.filebase = filebase;
-handles.din.bare.offset = offset;
-handles.din.bare.error.f = errorf; 
-handles.din.bare.error.g = errorg;
+
+try
+    handles.din.bare.error.f = error.f;
+    handles.din.bare.error.g = error.g;
+    handles.din.bare.offset = offset;
+catch
+    set(handles.statusbar, 'string', 'Using default error', 'BackgroundColor', 'red')
+    handles.din.bare.error = handles.constants.error;
+end
+
 
 %Plots the imported data to the lower plots
 plotraw(hObject, eventdata, handles);
@@ -402,8 +417,9 @@ handles.cond = conductance;
 %Changes the data file to not be "loading" anymore.
 set(handles.qcmfile,'string',qcmfile);
 set(handles.statusbar, 'string', 'File successfully loaded', 'BackgroundColor', 'green')
-
-handles = loadcleaned_Callback(hObject, eventdata, handles);
+if ~strcmp(qcmfile(end-7:end-4),'data')
+    handles = loadcleaned_Callback(hObject, eventdata, handles);
+end
 
 guidata(hObject, handles); %Saves new handles.
 
@@ -512,6 +528,8 @@ else
         errorg = defaulterrorg;
         reference = 0;
     end
+    minerror = [1 0 1 0 1 0 1];
+    errorg(errorg<1) = minerror(errorg<1);
 end
 
 function Solve_Callback(hObject,eventdata,handles)
@@ -664,7 +682,12 @@ if handles.filetype == 2
             return
         end
     end
-    samefiles = 1:length(files)-1;
+    samefiles = [];
+    for i = 1:length(files)
+        if ~strcmp(files{i}, 'reference') && ~strcmp(files{i}, 'version')
+            samefiles = [samefiles i];
+        end
+    end
 elseif handles.filetype == 4 %Loading a _data.mat file (no spectra available)
     conductance = [];
     set(handles.opencond, 'visible', 'off')
@@ -710,12 +733,12 @@ else
             %'_bare'
             rightstring = strfind(files(i).name, handles.din.qcmfile(1:end-4));
             barestring = strfind(files(i).name, 'bare');
-            if rightstring && isempty(barestring)
+            if ~isempty(rightstring) && isempty(barestring)
                 samefiles = [samefiles i];
             end
         catch Err
             %if ~strcmp(Err.identifier, 'MATLAB:nonLogicalConditional')
-            rethrow Err
+            rethrow(Err)
             %end
         end
     end
@@ -743,6 +766,8 @@ else
                 end
             case 'Ok'
                 handles.cond = [];
+                handles.cond = [];
+                conductance = [];
                 set(handles.opencond, 'visible', 'off')
                 guidata(hObject,handles)
                 return
@@ -764,11 +789,10 @@ handles.cond.spectra = [];
 for i = samefiles
     %Reads the filename and breaks it into chunks by the underscore
     %delimiter
-    if handles.filetype == 2 && ~strcmp(files{i}, 'reference') && ~strcmp(files{i}, 'version')
+    
+    if handles.filetype == 2
         parsed = textscan(files{i},'%s','delimiter','_');
         condfiles(index,1) = str2double(regexprep([parsed{1}{length(parsed{1})-4}], 'dot', '.'));
-    elseif handles.filetype == 2 %if it is the "reference" or "version" file
-        break
     else
         parsed = textscan(files(i).name,'%s','delimiter','_');
         condfiles(index,1) = str2double([parsed{1}{length(parsed{1})-4}]);
@@ -791,6 +815,7 @@ for i = samefiles
         handles.cond.filename{index} = [handles.din.qcmpath files(i).name];
     end
     index = index + 1;
+    
 end
 handles.cond.points = condfiles;
 conductance = handles.cond;
@@ -1021,7 +1046,18 @@ while but == 1
     end
     drawnow;
 end
-outputstructure = reformatdata(handles, outputs);
+
+handles.uitoggletool1.Enable = 'on'; %Turns zoom in back on
+handles.uitoggletool2.Enable = 'on'; %Turns zoom out back on
+handles.uitoggletool3.Enable = 'on'; %Turns pan back on
+handles.uitoggletool4.Enable = 'on'; %Turns datatip back on
+
+if k > 5 %Sets a threshold for asking about saving the data to the _data file
+    ask = 1;
+else
+    ask = 0;
+end
+outputstructure = reformatdata(handles, outputs, ask);
 handles.dout = outputstructure;
 if exist('contourplots', 'var') %Should be created during findsolution if desired
     handles.contourplots = contourplots;
@@ -1031,24 +1067,55 @@ set(handles.statusbar, 'string', '', 'BackgroundColor', 'default')
 
 
 function contourplots = plotcontours(handles, outputs, mnumber)
-if mnumber == 0 || isnan(outputs.df(1))%Creates a simple mechanism for supressing contour plots and weeding out errors
-    contourplots = 0;
-    return
+try
+if get(handles.issim, 'value')
+    comb = handles.constants.nhvals;
+    n1 = comb{mnumber}(1);
+    n2 = comb{mnumber}(2);
+    n3 = comb{mnumber}(3);
+    delf(1:2:5) = handles.deldatadata(1:3,2);
+    delg(1:2:5) = handles.deldatadata(1:3,4);
+    df1 = delf(n1);
+    df2 = delf(n2);
+    dg3 = delg(n3);
+    df3 = delf(n3);
+    drho = str2num(handles.propertytable.Data{1,1});
+    grho = str2num(handles.propertytable.Data{1,2});
+    phiout = str2num(handles.propertytable.Data{1,3});
+    d1out = handles.deldatadata(1,8);
+else
+%     if mnumber == 0 || isnan(outputs.df(1))%Creates a simple mechanism for supressing contour plots and weeding out errors
+%         contourplots = 0;
+%         return
+%     end
+    comb = handles.constants.nhvals;
+    n1 = comb{mnumber}(1);
+    n2 = comb{mnumber}(2);
+    n3 = comb{mnumber}(3);
+    delf = outputs.df;
+    delg = outputs.dg;
+    df1 = delf(n1);
+    df2 = delf(n2);
+    dg3 = delg(n3);
+    df3 = delf(n3);
+    drho = outputs.drho;
+    grho = outputs.grho;
+    phiout = outputs.phi;
+    d1out = outputs.d;
 end
-comb = handles.constants.nhvals;
-n1 = comb{mnumber}(1);
-n2 = comb{mnumber}(2);
-n3 = comb{mnumber}(3);
-delf = outputs.df;
-delg = outputs.dg;
-df1 = delf(n1);
-df2 = delf(n2);
-dg3 = delg(n3);
-df3 = delf(n3);
-drho = outputs.drho;
-grho = outputs.grho;
-phiout = outputs.phi;
-d1out = outputs.d;
+catch
+    comb = handles.constants.nhvals;
+    n1 = comb{mnumber}(1);
+    n2 = comb{mnumber}(2);
+    n3 = comb{mnumber}(3);
+    delf(1:2:5) = handles.deldatadata(1:3,1);
+    delg(1:2:5) = handles.deldatadata(1:3,3);
+    df1 = delf(n1);
+    df2 = delf(n2);
+    dg3 = delg(n3);
+    df3 = delf(n3);
+end
+
 
 dlofn=@(n,d1,phi) d1*n^(1-phi/180); %d/lambda
 Dn=@(n,d1,phi) 2*pi*dlofn(n,d1,phi)*(1-1i*tand(phi/2));
@@ -1091,7 +1158,41 @@ bot=scrsize(2);
 width=scrsize(3);
 height=scrsize(4);
 contourplots.fig = figure('outerPosition',[width/2,height/2,width/2,height/2.3]);
-
+if get(handles.issim, 'value')
+    comb = handles.constants.nhvals;
+    n1 = comb{mnumber}(1);
+    n2 = comb{mnumber}(2);
+    n3 = comb{mnumber}(3);
+    delf(1:2:5) = handles.deldatadata(1:3,2);
+    delg(1:2:5) = handles.deldatadata(1:3,4);
+    df1 = delf(n1);
+    df2 = delf(n2);
+    dg3 = delg(n3);
+    df3 = delf(n3);
+    drho = str2num(handles.propertytable.Data{1,1});
+    grho = str2num(handles.propertytable.Data{1,2});
+    phiout = str2num(handles.propertytable.Data{1,3});
+    d1out = handles.deldatadata(1,8);
+else
+%     if mnumber == 0 || isnan(outputs.df(1))%Creates a simple mechanism for supressing contour plots and weeding out errors
+%         contourplots = 0;
+%         return
+%     end
+    comb = handles.constants.nhvals;
+    n1 = comb{mnumber}(1);
+    n2 = comb{mnumber}(2);
+    n3 = comb{mnumber}(3);
+    delf = outputs.df;
+    delg = outputs.dg;
+    df1 = delf(n1);
+    df2 = delf(n2);
+    dg3 = delg(n3);
+    df3 = delf(n3);
+    drho = outputs.drho;
+    grho = outputs.grho;
+    phiout = outputs.phi;
+    d1out = outputs.d;
+end
 harmplotlim = [str2double(handles.contourtable.Data(3,1)), str2double(handles.contourtable.Data(3,2))];
 contourplots.harmplot = subplot(1,2,1);
 contourf(dplot,phiplot,harmratio,linspace(harmplotlim(1), harmplotlim(2),256),'edgecolor','none');
@@ -1127,7 +1228,7 @@ plot(contourplots.harmplot,d1out(n3), phiout, 'k+', 'markersize', 12, 'linewidth
 
 linkaxes([contourplots.dissplot, contourplots.harmplot],'xy')
 
-function handles = writecontourmap(handles)
+function handles = writecontourmap
 dl = linspace(0,1,250);
 phi = linspace(0,90,250);
 
@@ -1181,7 +1282,6 @@ catch Err
     end
 end
 linkaxes([handles.plot1 handles.plot2])
-guidata(hObject,handles)
 savefig('contourmap.fig')
 
 function solveall_Callback(hObject, eventdata, handles)
@@ -1192,16 +1292,21 @@ nhvals = handles.constants.nhvals; %Make the variable shorter to type
 set(handles.plotsolutioncontours, 'value', 0); %turn off plot contours for solve all
 
 struct2var(handles.din);
-[~,handles.datapoints]=size(qcmt);
-for k=1:handles.datapoints;
+% Solves only for the points in the window.
+limits = handles.axes1.XLim;
+[~, withinidx] = find(qcmt > limits(1) & qcmt < limits(2));
+handles.datapoints = length(withinidx);
+
+for k=1:length(withinidx); %Goes through the indexes of the relevant points
+    idx = withinidx(k);
     for nh=handles.activenh.on
-        handles.deldatadata(nhtoi(nh),1) = cleandelf(k,nh);
-        handles.deldatadata(nhtoi(nh),3) = cleandelg(k,nh);
+        handles.deldatadata(nhtoi(nh),1) = cleandelf(idx,nh);
+        handles.deldatadata(nhtoi(nh),3) = cleandelg(idx,nh);
     end
     mnumber = getnhvals(handles);
     [contourplots, handles] = redrawtable(hObject, handles, mnumber);
     for m = mnumber
-        [outputs{k,m}, handles] = findsolution(hObject, eventdata, handles,qcmt(k),m);
+        [outputs{k,m}, handles] = findsolution(hObject, eventdata, handles, qcmt(idx), m);
         if outputs{k,m}.d(1) < 0 || outputs{k,m}.phi>90 || outputs{k,m}.error == 0 || outputs{k,m}.error == -2
             %             answer = questdlg({['Failed to find solution at time ' num2str(qcmt(k)) ...
             %                 ' and ratio ' num2str(nhvals{m}(1)) ':' num2str(nhvals{m}(2))...
@@ -1223,14 +1328,14 @@ for k=1:handles.datapoints;
         end
     end
     if mod(k,100)==0
-        outputstructure = reformatdata(handles, outputs);
+        outputstructure = reformatdata(handles, outputs, 0);
         handles.dout = outputstructure;
         handles = plotvalues(hObject,handles);
         set(handles.statusbar, 'string', [num2str(k/handles.datapoints*100, 2) '% done'], 'BackgroundColor', 'default')
         drawnow %Update the visual on the gui
     end
 end
-outputstructure = reformatdata(handles, outputs);
+outputstructure = reformatdata(handles, outputs, 1);
 handles.dout = outputstructure;
 handles = plotvalues(hObject,handles);
 handles.contourplos = contourplots;
@@ -1319,7 +1424,7 @@ switch selection,
     case 'Yes',
         handles=guidata(hObject);
         if isfield(handles,'din')
-            hgsave(hObject,'onelayergui3.fig')
+            hgsave(hObject,'onelayergui5.fig')
             delete(hObject)
         else
             fprintf(1,'handles.din does not exist')
@@ -1403,7 +1508,7 @@ end
 save([handles.din.qcmpath handles.din.filebase '_cond.mat'], '-struct', 'cond');
 set(handles.statusbar, 'string', 'New spectra added to file!', 'BackgroundColor', 'green')
 
-function outstruct = reformatdata(handles, outputs)
+function outstruct = reformatdata(handles, outputs, ask)
 doerror = get(handles.calcerror, 'value');
 % each value of k corresponds to one time point selected from the plot
 % variables with 'p' in the name are the ones we use to create the plots
@@ -1473,18 +1578,26 @@ outstruct.nhvals = {handles.constants.nhvals{mnumber}};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Saves data to _data file, including raw data.
-if handles.overwrite == 1 %Disabled for _data files.
-    append = get(handles.qcmfile,'string');
-    append = [handles.din.qcmpath append(1:end-4)];
-    
-    data = struct('dgcalcp', outstruct.dgcalcp, 'dfcalcp', outstruct.dfcalcp, 'dgp', dgp, 'dfp', dfp,...
-        'timep', outstruct.timep, 'grhop', outstruct.grhop, 'drhop', ...
-        outstruct.drhop, 'phip', outstruct.phip, 'grhoep', outstruct.grhoep,...
-        'phiep', outstruct.phiep, 'drhoep', outstruct.drhoep,...
-        'absf', handles.din.absf, 'absg', handles.din.absg,...
-        'time', handles.din.qcmt, 'error', handles.din.bare.error,...
-        'offset', handles.din.bare.offset, 'nhvals', {outstruct.nhvals}, 'refG', refG);
-    save([append '_data.mat'], '-struct', 'data');
+if get(handles.autosolve,'value') && ask == 1 %If something was actually solved for
+    choice = questdlg(['Do you want to save these results?'], 'Save plotted results',...
+        'Yes', 'No', 'Yes');
+    switch choice
+        case 'Yes'
+            append = get(handles.qcmfile,'string');
+            append = [handles.din.qcmpath append(1:end-4)];
+            
+            data = struct('dgcalcp', outstruct.dgcalcp, 'dfcalcp', outstruct.dfcalcp, 'dgp', dgp, 'dfp', dfp,...
+                'timep', outstruct.timep, 'grhop', outstruct.grhop, 'drhop', ...
+                outstruct.drhop, 'phip', outstruct.phip, 'grhoep', outstruct.grhoep,...
+                'phiep', outstruct.phiep, 'drhoep', outstruct.drhoep,...
+                'delf', handles.din.cleandelf, 'delg', handles.din.cleandelg,...
+                'absf', handles.din.absf, 'absg', handles.din.absg,...
+                'time', handles.din.qcmt, 'error', handles.din.bare.error,...
+                'offset', handles.din.bare.offset, 'nhvals', {outstruct.nhvals}, 'refG', refG);
+            save([append '_data.mat'], '-struct', 'data');
+        case 'No'
+            return
+    end
 end
 
 function handles = plotvalues(hObject, handles, inputfigure, outputfigure, inputaxes, outputaxes)
@@ -1660,6 +1773,11 @@ for m = mnumber
     end
     harmnumb = harmnumb + 1;
 end
+if get(handles.loggamma, 'value')
+    set(inputaxes(2), 'yscale', 'log');
+else
+    set(inputaxes(2), 'yscale', 'linear');
+end
 
 xlabel(xlabeltext)
 ylabel('\Delta\Gamma_{n} (Hz)')
@@ -1716,7 +1834,7 @@ else
 end
 legendout(2)=legend(handles.constants.label{mnumber}, 'location','best');
 xlabel(xlabeltext)
-ylabel('|G_3^{*}|\rho (Pa-g/cm^{3})')
+ylabel(['|G_' num2str(itonh(get(handles.modulustoplot, 'value'))) '^{*}|\rho (Pa-g/cm^{3})'])
 if get(handles.logG, 'value')
     set(outputaxes(2), 'yscale', 'log');
 else
@@ -1784,6 +1902,8 @@ m.delg = handles.din.cleandelg;
 m.absf = handles.din.absf;
 m.absg = handles.din.absg;
 m.time = handles.din.qcmt;
+m.offset = handles.din.bare.offset;
+m.error = handles.din.bare.error;
 
 function handles = loadcleaned_Callback(hObject, eventdata, handles)
 % Loads the "clean" variables from the _data file (delf and delg).
@@ -2083,23 +2203,23 @@ else
         drho = (dfi(refnh)/real(delfstar(drefnh,phi)))*zq/(2*refnh*f1^2); %calculate reference drho based on n2
         grho(refn) = ((drho/dref)*refn*f1*cosd(phi/2))^2;
         
-        if grho(refnh) > 1e13
-            disp('Grho is too large. Check input values')
-            keyboard
-        end
+%         if grho(refnh) > 1e13
+%             disp('Grho is too large. Check input values')
+%             keyboard
+%         end
             
         outputs = calculatevalues(handles, drho*1000, grho(refn)*0.001, phi, refn);
         
-        decaylength(1:2:7) = outputs.lrho(1:2:7)*(1/(2*pi))*cotd(phi/2); %Calculate the decay length
-        maxnh = max(nhi(1:3)); %Get maximum harmonic in calculation
-        outputs.drho(outputs.drho*1e-3 > decaylength(maxnh)*0.9) = NaN;
+%         decaylength(1:2:7) = outputs.lrho(1:2:7)*(1/(2*pi))*cotd(phi/2); %Calculate the decay length
+%         maxnh = max(nhi(1:3)); %Get maximum harmonic in calculation
+%         outputs.drho(outputs.drho > decaylength(maxnh)*0.9) = NaN;
         
         % add values to the output structure
         outputs.df=dfi;
         outputs.dg=dgi;
         outputs.error = exitflag;
            
-        assignin('base','solveouptus',outputs)
+        assignin('base','solveouptus',outputs);
     end
 end
 
@@ -2112,7 +2232,7 @@ function maps_Callback(hObject, eventdata, handles)
 try
     responsemap = openfig('contourmap.fig');
 catch
-    responsemap = writecontourmap;
+    responsemap = writecontourmap(hObject, handles);
 end
 
 zoom(responsemap, 'reset')
@@ -2121,12 +2241,26 @@ dgp=handles.din.cleandelg;
 timeinp=handles.din.qcmt;
 todo = size(handles.dout);
 
-for k=1:todo(1)
-    %for m = mnumber
-    struct2var(handles.dout{k}) %data for specific harmonic combination
-    dp(k,:)=d(1:5);
-    phip(k)=phi(1);
+% grhop = handles.saveplot.grhop;
+% drhop = handles.saveplot.drhop;
+% phi  = handles.saveplot.phip;
+grhop = handles.dout.grhop;
+drhop = handles.dout.drhop;
+phi = handles.dout.phip;
+
+for n = 1:2:5
+    for k = 1:length(grhop)
+        lrho = lambdarhof(3, n, grhop(k,1)*1000, phi(k,1));
+        dp(k,n) = drhop(k,1)/lrho/1000;
+        phip(k) = phi(k,1);
+    end
 end
+% for k=1:todo(1)
+%     %for m = mnumber
+%     struct2var(handles.dout{k}) %data for specific harmonic combination
+%     dp(k,:)=d(1:5);
+%     phip(k)=phi(1);
+% end
 
 if isempty(find(dp>0))
     warndlg('All of the data is negative and cannot be plotted')
@@ -2145,8 +2279,8 @@ for i = 1:2:5
     set([left(i), right(i)], 'color', datalinecolor{i});
 end
 
-set(plot1, 'ylim', [max(floor(min(phip)/10)*10,0) min(ceil(max(phip)/10)*10,90)]);
-set(plot1, 'xlim', [max(floor(min(min(dp(:,1:2:5)))/.3)*.3,0) min(ceil(max(max(dp(:,1:2:5)))/.3)*.3,1)]);
+% set(plot1, 'ylim', [max(floor(min(phip)/10)*10,0) min(ceil(max(phip)/10)*10,90)]);
+% set(plot1, 'xlim', [max(floor(min(min(dp(:,1:2:5)))/.3)*.3,0) min(ceil(max(max(dp(:,1:2:5)))/.3)*.3,1)]);
 
 function handles = xlabeltext_Callback(hObject, eventdata, handles)
 %Updates the saved values for the axes and plotting.
@@ -2471,15 +2605,15 @@ max_drho = uicontrol('style','edit','string','10','units','normalized',...
 uicontrol('style','text','string','max dp (g/m^2)','units','normalized',...
     'position',[0.3 0.72 .14 .1]);
 
-%Create label and input box for the phase angle
-%It defaults to the current phase angle in onelayergui
+%Create label and input box for the phase angle It defaults to the current
+%phase angle in onelayergui
 phi = uicontrol('style','edit','string',handles.propertytable.Data{1,3},'units','normalized',...
     'position',[0.75 0.65 .25 .1]);
 uicontrol('style','text','string','Phi','units','normalized',...
     'position',[0.3 0.62 .14 .1]);
 
-%Create label and pull-down for the modulus reference harmonic
-%It defaults to the value in onelayergui
+%Create label and pull-down for the modulus reference harmonic It defaults
+%to the value in onelayergui
 ref_G = uicontrol('style','popup','string',{'<html>G<sub>1</sub></html>',...
     '<html>G<sub>3</sub></html>', '<html>G<sub>5</sub></html>',...
     '<html>G<sub>7</sub></html>'},'value', get(handles.modulustoplot, 'value'),...
@@ -2487,8 +2621,8 @@ ref_G = uicontrol('style','popup','string',{'<html>G<sub>1</sub></html>',...
 uicontrol('style','text','string','Reference G','units','normalized',...
     'position',[0.3 0.52 .14 .1]);
 
-%Create label and input box for the modulus
-%It defaults to the current modulus in onelayergui
+%Create label and input box for the modulus It defaults to the current
+%modulus in onelayergui
 grho = uicontrol('style','edit','string',handles.propertytable.Data{1,2},'units','normalized',...
     'position',[0.75 0.45 .25 .1]);
 uicontrol('style','text','string','|G*|p (Pa-g/cm^3)','units','normalized',...
@@ -2552,7 +2686,15 @@ for n = nh
     end
     d(n) = (drho-0.000025)*1000;
 end
-%Displays the maximum thickness 
+%Displays the maximum thickness
 set(calcmax, 'string', ['Max drho: ' num2str(min(d(d~=0))) 'g/m^2']) 
 
 
+% --- Executes on button press in plotsolutioncontours.
+function plotsolutioncontours_Callback(hObject, eventdata, handles)
+
+if get(handles.plotsolutioncontours, 'value') == 1
+    set(handles.contourtable, 'visible', 'on')
+elseif get(handles.plotsolutioncontours, 'value') == 0
+    set(handles.contourtable, 'visible', 'off')
+end

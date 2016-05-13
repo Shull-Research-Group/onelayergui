@@ -75,7 +75,7 @@ else
     % Set x to be directly in the middle, and y so that their tops align.
     newX = parentPosition(1) + (parentPosition(3)/2 - currentPosition(3)/2);
     %newY = parentPosition(2) + (parentPosition(4)/2 - currentPosition(4)/2);
-    newY = parentPosition(2) + (parentPosition(4) - currentPosition(4)*.95);
+    newY = parentPosition(2) + (parentPosition(4) - currentPosition(4))%*.95);
     newW = currentPosition(3);
     newH = currentPosition(4);
     
@@ -156,7 +156,7 @@ else
     return    
 end
 set(handles.(['remove' num2str(harmonic)]), 'visible', 'off');
-%guidata(hObject,handles)
+% guidata(hObject,handles)
 plotraw(hObject, eventdata, handles)
 plotcond(hObject, handles)
 
@@ -529,10 +529,19 @@ end
 function F_both = lfun4cs(p,x)
 F_both = [lfun4c(p,x) lfun4s(p,x)];
 
-function [fitdata, spectra] = fitmultiplepeaks(spectra, condsus)
-freq = spectra(:,1);
-conductance = spectra(:,2);
-susceptance = spectra(:,3);
+function [fitdata, spectra] = fitmultiplepeaks(spectra, condsus, fitrange)
+if exist('fitrange', 'var')
+    fullfreq = spectra(:,1);
+    freq = spectra(fitrange,1);
+    conductance = spectra(fitrange,2);
+    susceptance = spectra(fitrange,3);
+else
+    fullfreq = spectra(:,1);
+    freq = spectra(:,1);
+    conductance = spectra(:,2);
+    susceptance = spectra(:,3);
+end
+    
 if mean(freq) < 24e6 && mean(freq) > 16e6
     fitdata = [0 0 0 0 0];
     disp('The peak is the one at 21')
@@ -565,8 +574,8 @@ smoothsus = smooth(susceptance,5);
 for i = 1:numpeaks
     [~, ~, G_parametersmul] = fit_spectra(G_parametersmul, freq, [smoothcond smoothsus], Imul, condsus);
 end
-condspec = lfun4c(G_parametersmul, freq);
-susspec = lfun4s(G_parametersmul, freq);
+condspec = lfun4c(G_parametersmul, fullfreq);
+susspec = lfun4s(G_parametersmul, fullfreq);
 
 %This code can be used if you want to compare results from the left peak
 %and the tallest peak. "imptpeak" used to be an input value.
@@ -798,7 +807,7 @@ function F_susceptance = lfun4s(p,x)
 %p(2): gamma0 dissipation
 %p(3): phi phase angle difference
 %p(4): Gmax maximum conductance
-%p(5): Conductance offset value
+%p(5): Conductance offset value %Unusd in this function
 %p(6): Susceptance offset value
 if length(p) == 6
     F_susceptance = lorentzsus(p(1:4), x) + p(6);
@@ -834,7 +843,11 @@ if isfield(handles, 'currspectime')
     plottime = handles.currspectime;
     if abs(plottime - str2num(get(handles.currentpoint, 'string'))) <= 0.0011
         spectra =  handles.cond.spectra{index, harmonic};
-        [fitdata newspectra] = fitmultiplepeaks(spectra, handles.refittypetoggle);
+        %This part finds that section that is within the plot limits
+        limits = handles.(['nh' num2str(harmonic) 'axes']).XLim;
+        fitrange = find(spectra(:,1) > limits(1) & spectra(:,1) < limits(2));
+       
+        [fitdata newspectra] = fitmultiplepeaks(spectra, handles.refittypetoggle, fitrange);
         if fitdata(1)/harmonic < -3e6
             fitdata = [NaN NaN NaN NaN NaN];
         end
@@ -968,7 +981,9 @@ if get(handles.actionrefit, 'value')
 else % Since it is a button group, the only other option is to be removing.
     for harmonic = harmonics %for selected harmonics
         handles.main.din.cleandelf(startidx:endidx, harmonic) = NaN;
-        handles.main.din.cleandelg(startidx:endidx, harmonic) = NaN;        
+        handles.main.din.cleandelg(startidx:endidx, harmonic) = NaN;
+        handles.main.din.absf(startidx:endidx, harmonic) = NaN;
+        handles.main.din.absg(startidx:endidx, harmonic) = NaN;
     end
 end
 
@@ -1060,7 +1075,11 @@ for i = 1:2:max(handles.main.activenh.on)
         end
         xlabel('Frequency (MHz)')
         ylabel('Conductance (S)')
-        title([titles{i} ' harmonic'])
+        if i > 2
+            title([titles{i} ' harmonic'])
+        else
+            title('Fundamental (5 MHz)')
+        end
         
 end
 figure(h);
