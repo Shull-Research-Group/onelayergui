@@ -1041,8 +1041,12 @@ for i = 1:length(data)
     shifttimes = logical(higher.*lower);
     tempidx = find(temp == handles.reftemp); %Get the index of the temperature from the reference
     if isempty(tempidx)
-        warndlg(['No reference data was found for ' num2str(temp) 'C. Data will be ignored.'])
-        absfshift(shifttimes,1:2:5) = NaN;
+        if temp < 25 %If there is no correction needed (assume this is the same as the bare temp)
+            absfshift(shifttimes,:) = handles.din.absf(shifttimes,:);
+        else
+            warndlg(['No reference data was found for ' num2str(temp) 'C. Data will be ignored.'])
+            absfshift(shifttimes,1:2:5) = NaN;
+        end
     else
         absfshift(shifttimes,:) = handles.din.absf(shifttimes,:)-repmat(handles.refshifts{tempidx},[sum(shifttimes),1]);
     end
