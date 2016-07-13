@@ -1013,7 +1013,6 @@ cleandelg(isnan(cleandelg)) = interp1(find(~isnan(cleandelg)), cleandelg(~isnan(
 
 outputs={};
  
-
 while but == 1
     k = k+1;
     handles.datapoints = k;
@@ -1069,37 +1068,37 @@ set(handles.statusbar, 'string', '', 'BackgroundColor', 'default')
 function contourplots = plotcontours(handles, outputs, mnumber)
 maingui = gcf;
 try
-if get(handles.issim, 'value')
-    comb = handles.constants.nhvals;
-    n1 = comb{mnumber}(1);
-    n2 = comb{mnumber}(2);
-    n3 = comb{mnumber}(3);
-    delf(1:2:5) = handles.deldatadata(1:3,2);
-    delg(1:2:5) = handles.deldatadata(1:3,4);
-    df1 = delf(n1);
-    df2 = delf(n2);
-    dg3 = delg(n3);
-    df3 = delf(n3);
-    drho = str2num(handles.propertytable.Data{1,1});
-    grho = str2num(handles.propertytable.Data{1,2});
-    phiout = str2num(handles.propertytable.Data{1,3});
-    d1out = handles.deldatadata(1,8);
-else
-    comb = handles.constants.nhvals;
-    n1 = comb{mnumber}(1);
-    n2 = comb{mnumber}(2);
-    n3 = comb{mnumber}(3);
-    delf = outputs.df;
-    delg = outputs.dg;
-    df1 = delf(n1);
-    df2 = delf(n2);
-    dg3 = delg(n3);
-    df3 = delf(n3);
-    drho = outputs.drho;
-    grho = outputs.grho;
-    phiout = outputs.phi;
-    d1out = outputs.d;
-end
+    if get(handles.issim, 'value')
+        comb = handles.constants.nhvals;
+        n1 = comb{mnumber}(1);
+        n2 = comb{mnumber}(2);
+        n3 = comb{mnumber}(3);
+        delf(1:2:5) = handles.deldatadata(1:3,2);
+        delg(1:2:5) = handles.deldatadata(1:3,4);
+        df1 = delf(n1);
+        df2 = delf(n2);
+        dg3 = delg(n3);
+        df3 = delf(n3);
+        drho = str2num(handles.propertytable.Data{1,1});
+        grho = str2num(handles.propertytable.Data{1,2});
+        phiout = str2num(handles.propertytable.Data{1,3});
+        d1out = handles.deldatadata(1,8);
+    else
+        comb = handles.constants.nhvals;
+        n1 = comb{mnumber}(1);
+        n2 = comb{mnumber}(2);
+        n3 = comb{mnumber}(3);
+        delf = outputs.df;
+        delg = outputs.dg;
+        df1 = delf(n1);
+        df2 = delf(n2);
+        dg3 = delg(n3);
+        df3 = delf(n3);
+        drho = outputs.drho;
+        grho = outputs.grho;
+        phiout = outputs.phi;
+        d1out = outputs.d;
+    end
 catch
     comb = handles.constants.nhvals;
     n1 = comb{mnumber}(1);
@@ -1113,7 +1112,6 @@ catch
     df3 = delf(n3);
 end
 
-
 dlofn=@(n,d1,phi) d1*n^(1-phi/180); %d/lambda
 Dn=@(n,d1,phi) 2*pi*dlofn(n,d1,phi)*(1-1i*tand(phi/2));
 dfstardn = @(Dn) -tan(Dn)/Dn;
@@ -1125,14 +1123,50 @@ frd = @(dn, n, phi) imag(dfstar(n3, dlof1(n, dn, phi), phi))/real(dfstar(n3, dlo
 %%  Make the contour plots
 freqerror = handles.din.bare.error.f;
 disserror = handles.din.bare.error.g;
-dissrtolerance = abs(((dg3-disserror(n3))-(dg3+disserror(n3)))/dg3); % wsqrt(freqerror(n3)^2 + disserror(n3)^2); 
-harmtolerance = abs(((df1-freqerror(n1))-(df1+freqerror(n1)))/df1); % sqrt(freqerror(n1)^2 + freqerror(n2)^2); 
+
+% The following assumes that n3 = n1 or n2, so this exits if that isn't the
+% case.
+if n3 ~= n1 && n3 ~= n2
+    set(handles.statusbar, 'string', 'Unable to make contour plot', 'BackgroundColor', 'yellow')  
+    warning = warndlg('There isn''t a function to calculate the error in the contour plot for this harmonic combination. Please select one where n3 = n1 or n2.', 'Contour Error', 'modal');
+    uiwait(warning);
+    contourplots = [];
+    return
+end
+
+shift = 2; %Sets the range over which the derivative is calculated
+shifts = -shift:shift:shift;
+
+%Sets up a matrix of all of the combinations that need to be looked at.
+indecies = [unique(perms([1 2 2]), 'rows'); unique(perms([2 2 3]), 'rows')];
+for i = 1:6
+    k = indecies(i,1);
+    l = indecies(i,2);
+    m = indecies(i,3);
+    df(n1) = df1 + shifts(k);
+    df(n2) = df2 + shifts(l);
+    dg(n3) = dg3 + shifts(m);
+    
+    dissratiosol(k, l, m) = dg(n3)./df(n3); %df(n3) will be equal to either df(n1) or df(n2)
+    harmratiosol(k, l, m) = (n1/n2)*df(n2)./df(n1);
+end
+
+[yrd, xrd, zrd] = gradient(dissratiosol, shift); %Calculates the gradient
+[yrh, xrh, zrh] = gradient(harmratiosol, shift);
+
+errrh = [xrh(2,2,2) yrh(2,2,2) zrh(2,2,2)];
+errrd = [xrd(2,2,2) yrd(2,2,2) zrd(2,2,2)];
+
+shifts = [freqerror(n1) freqerror(n2) disserror(n3)];
+
+rhe = sqrt(sum((errrh.*shifts).^2)); %Turns the gradient into an error based on the derfault error values
+rde = sqrt(sum((errrd.*shifts).^2));
 
 edissratio = delg(n3)./delf(n3);
 eharmratio = (n1/n2)*delf(n2)./delf(n1);
 
-dissrrange=[(1-dissrtolerance)*edissratio, (1+dissrtolerance)*edissratio]; % this is the range of dissipation ratios to consider (n=3)
-harmrrange=[(1-harmtolerance)*eharmratio, (1+harmtolerance)*eharmratio]; % range of harmonic ratios to consider (delf(3)/delf(1))
+dissrrange=[(1-rde)*edissratio, (1+rde)*edissratio]; % this is the range of dissipation ratios to consider (n=3)
+harmrrange=[(1-rhe)*eharmratio, (1+rhe)*eharmratio]; % range of harmonic ratios to consider (delf(3)/delf(1))
 
 dmin=handles.contourtable.Data(1,1);
 dmax=handles.contourtable.Data(1,2);
@@ -1142,7 +1176,8 @@ phimax=handles.contourtable.Data(2,2);
 n=75; % resolution of map
 dplot = linspace(dmin,dmax,n);
 phiplot = linspace(phimin,phimax,n);
-for i = 1:n
+
+for i = 1:n %Calculates the values of rh and rd over the contour plot
     for j = 1:n
         harmratio(j, i) = frh(dplot(i), n3, phiplot(j));
         dissratio(j, i) = frd(dplot(i), n3, phiplot(j));
@@ -2085,6 +2120,7 @@ errorsg = handles.din.bare.error.g;
 shift = 2;
 shifts = -shift:shift:shift;
 
+%This creates a matrix of all of the shifts necessary
 indecies = [unique(perms([1 2 2]), 'rows'); unique(perms([2 2 3]), 'rows')];
 for i = 1:6
     k = indecies(i,1);
