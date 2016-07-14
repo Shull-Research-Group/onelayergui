@@ -1906,6 +1906,47 @@ end
 linkaxes([outputaxes(1:3) inputaxes(1:2)],'x')
 set(outputaxes(1), 'xlim', [-Inf Inf])
 
+%Change how the brushing tool works to enable calculation of averages
+hToolbar = findall(outputplot, 'tag', 'FigureToolBar');
+hPrintButton = findall(hToolbar,'tag','Exploration.Brushing');
+set(hPrintButton, 'ClickedCallback',{@getaverage_ClickedCallback, handles}, 'TooltipString','Average values');
+
+function getaverage_ClickedCallback(hObject,eventdata,handles)
+%Changes the function of the uitoolbar buton to calculate average values in
+%a time window.
+
+% select the points with mouse and get coordinates
+k = waitforbuttonpress;
+point1 = get(gca,'CurrentPoint');    % button down detected
+finalRect = rbbox;                   % return figure units
+point2 = get(gca,'CurrentPoint');    % button up detected
+point1 = point1(1,1:2);              % extract x and y
+point2 = point2(1,1:2);
+xvals = [point1(1), point2(1)];
+% Get the minimum and maximum values in x.
+timemin = min(xvals)*handles.plotting.timefactor;
+timemax = max(xvals)*handles.plotting.timefactor;
+idx = handles.dout.timep(:,1) >= timemin & handles.dout.timep(:,1) <= timemax;
+
+mnumber = getnhvals(handles); %Get selected harmonics
+%Get average of values in the time range
+drhomean = nanmean(handles.dout.drhop(idx,mnumber));
+grhomean = nanmean(handles.dout.grhop(idx,mnumber));
+phimean = nanmean(handles.dout.phip(idx,mnumber));
+%Print the average values for each harmonic combination
+disp(['Average values from time ' num2str(timemin/handles.plotting.timefactor,2)  ' to '...
+    num2str(timemax/handles.plotting.timefactor,2) ' ' handles.plotting.unit])
+for i = 1:length(mnumber) 
+    label = handles.dout.nhvals{i};
+    disp([num2str(label(1)) ':' num2str(label(2)) ',' num2str(label(3))])
+    disp(['drho:' num2str(drhomean(i),'%6.3f')])
+    disp(['grho:' num2str(grhomean(i),'%6.4g')])
+    disp(['phi:' num2str(phimean(i),'%6.2f')]);
+end
+
+function calculateavg(hObject, eventdata, handles)
+disp('What lives here?')
+
 function write_Callback(hObject,eventdata,handles)
 writeplots(hObject,handles)
 
@@ -2401,7 +2442,7 @@ function outputs = calculatevalues(handles, drho, grhoref, phi, refG)
 drho = 0.001*drho;
 grhoref = 1000*grhoref;
 
-Zq = handles.constants.zq;
+Zq = handles.constants.zq; 
 f1 = handles.constants.f1;
 
 for n = [1,3,5,7]
